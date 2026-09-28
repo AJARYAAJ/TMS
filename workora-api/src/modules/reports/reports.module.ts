@@ -67,7 +67,7 @@ export class ReportsController {
     const db = this.dataSource;
     const pid = project.id;
     const group = (col: string) => db.query(`SELECT ${col} AS key, COUNT(*)::int AS count FROM tasks WHERE project_id = $1 GROUP BY ${col}`, [pid]);
-    const [[totals], byStatus, byPriority, byType, workload, trend, activeSprint, timeByUser] = await Promise.all([
+    const [[totals], byStatus, byPriority, byType, workload, trend, activeSprint, timeByUser, byState] = await Promise.all([
       db.query(
         `SELECT COUNT(*)::int AS total,
                 COUNT(*) FILTER (WHERE status = 'DONE')::int AS completed,
@@ -102,6 +102,12 @@ export class ReportsController {
           WHERE t.project_id = $1 AND e.minutes IS NOT NULL GROUP BY u.id, u.name ORDER BY minutes DESC`,
         [pid],
       ),
+      db.query(
+        `SELECT ws.id, ws.name, ws.color, ws.category, ws.wip_limit AS "wipLimit", COUNT(t.id)::int AS count
+           FROM workflow_states ws LEFT JOIN tasks t ON t.state_id = ws.id
+          WHERE ws.project_id = $1 GROUP BY ws.id ORDER BY ws.position`,
+        [pid],
+      ),
     ]);
     let sprint = null;
     if (activeSprint) {
@@ -123,6 +129,7 @@ export class ReportsController {
       trend,
       activeSprint: sprint,
       timeByUser,
+      byState,
     };
   }
 }

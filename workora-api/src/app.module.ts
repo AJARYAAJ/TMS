@@ -38,6 +38,8 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { LabelsModule } from './modules/labels/labels.module';
 import { RoadmapModule } from './modules/roadmap/roadmap.module';
 import { TimeModule } from './modules/time/time.module';
+import { RecurrenceModule } from './modules/recurrence/recurrence.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 
 @Module({
   imports: [
@@ -78,6 +80,8 @@ import { TimeModule } from './modules/time/time.module';
     IntegrationsModule,
     FavoritesModule,
     RoadmapModule,
+    WorkflowModule,
+    RecurrenceModule,
   ],
   providers: [
     // Order matters: authenticate first, then rate-limit per user, then check RBAC.

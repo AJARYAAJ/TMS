@@ -30,7 +30,9 @@ export type DomainEventType =
   | 'DOCUMENT_DELETED'
   | 'GOAL_CREATED'
   | 'GOAL_UPDATED'
-  | 'AUTOMATION_RAN';
+  | 'AUTOMATION_RAN'
+  | 'WORKFLOW_UPDATED'
+  | 'TASK_RECURRED';
 
 export interface FieldChange {
   from: unknown;

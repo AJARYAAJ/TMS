@@ -6,6 +6,7 @@ import { EventBus } from '../../common/events/event-bus.service';
 import { ApiException } from '../../common/http/api-exception';
 import { isUuid } from '../../common/http/identifiers';
 import { Task, TaskStatus } from '../tasks/task.entity';
+import { DEFAULT_STATES, WorkflowState } from '../workflow/workflow-state.entity';
 import { Project, ProjectStatus } from './project.entity';
 import { CreateProjectDto, toProjectDto, UpdateProjectDto } from './projects.dto';
 
@@ -61,6 +62,8 @@ export class ProjectsService {
           ownerId: principal.userId,
         }),
       );
+      // Every project starts with the default workflow; admins can customise it later.
+      await m.save(DEFAULT_STATES.map((st, position) => m.create(WorkflowState, { ...st, position, organizationId: principal.organizationId, projectId: saved.id })));
       return findProject(m, principal.organizationId, saved.id);
     });
     const dto$ = toProjectDto(project);

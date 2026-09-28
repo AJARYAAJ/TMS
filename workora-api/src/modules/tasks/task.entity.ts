@@ -1,5 +1,7 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn, VersionColumn } from 'typeorm';
 import { Label } from '../labels/label.entity';
+import type { RecurrenceRule } from '../recurrence/recurrence';
+import { WorkflowState } from '../workflow/workflow-state.entity';
 import { User } from '../users/user.entity';
 
 export enum TaskStatus {
@@ -48,6 +50,12 @@ export class Task {
   @Column({ type: 'date', nullable: true }) startDate: string | null;
   @Column({ type: 'date', nullable: true }) dueDate: string | null;
   @Column({ type: 'timestamptz', nullable: true }) completedAt: Date | null;
+  /** Workflow column; `status` always mirrors this state's category. */
+  @Column('uuid') stateId: string;
+  @Column({ type: 'jsonb', nullable: true }) recurrence: RecurrenceRule | null;
+  /** Shared by every occurrence of a recurring task. */
+  @Column({ type: 'uuid', nullable: true }) seriesId: string | null;
+  @Column({ type: 'timestamptz', nullable: true, select: false }) recurrenceSpawnedAt: Date | null;
   /** Epic or parent task (subtasks). */
   @Column({ type: 'uuid', nullable: true }) parentId: string | null;
   @Column({ type: 'int', nullable: true }) estimateMinutes: number | null;
@@ -59,6 +67,7 @@ export class Task {
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' }) @JoinColumn({ name: 'assignee_id' }) assignee: User | null;
   @ManyToOne(() => User) @JoinColumn({ name: 'reporter_id' }) reporter: User;
   @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' }) @JoinColumn({ name: 'parent_id' }) parent: Task | null;
+  @ManyToOne(() => WorkflowState) @JoinColumn({ name: 'state_id' }) state: WorkflowState;
   @ManyToMany(() => Label)
   @JoinTable({ name: 'task_labels', joinColumn: { name: 'task_id' }, inverseJoinColumn: { name: 'label_id' } })
   labels: Label[];

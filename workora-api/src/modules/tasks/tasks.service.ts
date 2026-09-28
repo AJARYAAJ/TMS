@@ -10,13 +10,16 @@ import { Label } from '../labels/label.entity';
 import { Membership } from '../organizations/membership.entity';
 import { findProject } from '../projects/projects.service';
 import { Sprint, SprintStatus } from '../sprints/sprint.entity';
+import { WorkflowState } from '../workflow/workflow-state.entity';
 import { TaskLink, TaskLinkType } from './task-link.entity';
 import { Task, TASK_STATUSES, TaskStatus } from './task.entity';
+import { toStateDto } from '../workflow/workflow-state.entity';
 import { AddLinkDto, CreateTaskDto, EMPTY_STATS, ListTasksQuery, MoveTaskDto, TaskDto, TaskStats, toTaskDto, UpdateTaskDto } from './tasks.dto';
 
-const TASK_RELATIONS = { assignee: true, reporter: true, labels: true, parent: true } as const;
-const NULLABLE = new Set(['assigneeId', 'sprintId', 'storyPoints', 'startDate', 'dueDate', 'parentId', 'estimateMinutes']);
-const EDITABLE = ['title', 'description', 'type', 'priority', 'assigneeId', 'sprintId', 'storyPoints', 'startDate', 'dueDate', 'parentId', 'estimateMinutes'] as const;
+const TASK_RELATIONS = { assignee: true, reporter: true, labels: true, parent: true, state: true } as const;
+const NULLABLE = new Set(['assigneeId', 'sprintId', 'storyPoints', 'startDate', 'dueDate', 'parentId', 'estimateMinutes', 'recurrence']);
+const EDITABLE = ['title', 'description', 'type', 'priority', 'assigneeId', 'sprintId', 'storyPoints', 'startDate', 'dueDate', 'parentId', 'estimateMinutes', 'recurrence'] as const;
+const same = (a: unknown, b: unknown) => (a && typeof a === 'object') || (b && typeof b === 'object') ? JSON.stringify(a ?? null) === JSON.stringify(b ?? null) : a === b;
 
 /** Resolve a task by UUID or human key (ECOM-102) within the tenant. */
 export async function findTask(m: EntityManager, orgId: string, idOrKey: string) {
@@ -74,9 +77,35 @@ async function nextTaskNumber(m: EntityManager, projectId: string): Promise<numb
   return Number(result.raw[0].task_seq);
 }
 
-/** Rewrites 0..n-1 positions for a column, optionally inserting `insert` at `index`. */
-async function reorderColumn(m: EntityManager, projectId: string, status: TaskStatus, exclude?: Task, insert?: { task: Task; index: number }) {
-  const column = await m.find(Task, { where: { projectId, status }, order: { position: 'ASC', createdAt: 'ASC' } });
+/**
+ * Picks the workflow state for a task: an explicit state (must belong to the project), else the
+ * first state of the requested status category, else the project's first state.
+ */
+export async function resolveState(m: EntityManager, projectId: string, want: { stateId?: string | null; status?: TaskStatus | null }) {
+  if (want.stateId) {
+    const state = await m.findOneBy(WorkflowState, { id: want.stateId, projectId });
+    if (!state) throw ApiException.badRequest('INVALID_STATE', 'Workflow state does not belong to this project');
+    return state;
+  }
+  const states = await m.find(WorkflowState, { where: { projectId }, order: { position: 'ASC' } });
+  if (!states.length) throw ApiException.badRequest('NO_WORKFLOW', 'This project has no workflow states');
+  if (!want.status) return states[0];
+  const match = states.find((st) => st.category === want.status);
+  if (!match) throw ApiException.badRequest('NO_STATE_FOR_STATUS', `This project's workflow has no ${want.status.replace('_', ' ').toLowerCase()} state`);
+  return match;
+}
+
+/** Where new tasks land: the first "to do" state, or the first state if the workflow has none. */
+export async function defaultState(m: EntityManager, projectId: string) {
+  const states = await m.find(WorkflowState, { where: { projectId }, order: { position: 'ASC' } });
+  const state = states.find((st) => st.category === TaskStatus.TODO) ?? states[0];
+  if (!state) throw ApiException.badRequest('NO_WORKFLOW', 'This project has no workflow states');
+  return state;
+}
+
+/** Rewrites 0..n-1 positions for a workflow column, optionally inserting `insert` at `index`. */
+async function reorderColumn(m: EntityManager, projectId: string, stateId: string, exclude?: Task, insert?: { task: Task; index: number }) {
+  const column = await m.find(Task, { where: { projectId, stateId }, order: { position: 'ASC', createdAt: 'ASC' } });
   const ordered = column.filter((t) => t.id !== exclude?.id && t.id !== insert?.task.id);
   if (insert) ordered.splice(Math.min(insert.index, ordered.length), 0, insert.task);
   for (const [i, t] of ordered.entries()) {
@@ -102,6 +131,7 @@ export class TasksService {
       .leftJoinAndSelect('t.reporter', 'reporter')
       .leftJoinAndSelect('t.labels', 'labels')
       .leftJoinAndSelect('t.parent', 'parent')
+      .leftJoinAndSelect('t.state', 'state')
       .where('t.organizationId = :orgId', { orgId: principal.organizationId });
 
     if (q.projectId) {
@@ -122,6 +152,7 @@ export class TasksService {
     if (q.parentId === 'none') qb.andWhere('t.parentId IS NULL');
     else if (q.parentId) qb.andWhere('t.parentId = :parentId', { parentId: q.parentId });
     if (q.labelId) qb.andWhere('t.id IN (SELECT tl.task_id FROM task_labels tl WHERE tl.label_id = :labelId)', { labelId: q.labelId });
+    if (q.stateId) qb.andWhere('t.stateId = :stateId', { stateId: q.stateId });
     if (q.type) qb.andWhere('t.type = :type', { type: q.type });
     if (q.priority) qb.andWhere('t.priority = :priority', { priority: q.priority });
     if (q.open === 'true') qb.andWhere('t.status <> :done', { done: TaskStatus.DONE });
@@ -146,7 +177,7 @@ export class TasksService {
         qb.orderBy(`t.${q.sort}`, order);
         break;
       default:
-        qb.orderBy('t.status', 'ASC').addOrderBy('t.position', order);
+        qb.orderBy('state.position', 'ASC').addOrderBy('t.position', order);
     }
     qb.addOrderBy('t.number', 'ASC').skip((page - 1) * size).take(size);
 
@@ -166,11 +197,15 @@ export class TasksService {
     const project = await findProject(this.dataSource.manager, orgId, projectIdOrKey);
     const where: Record<string, unknown> = { projectId: project.id };
     if (sprintId && isUuid(sprintId)) where.sprintId = sprintId;
-    const tasks = await this.dataSource.getRepository(Task).find({ where, relations: TASK_RELATIONS, order: { position: 'ASC', number: 'ASC' } });
+    const [tasks, states] = await Promise.all([
+      this.dataSource.getRepository(Task).find({ where, relations: TASK_RELATIONS, order: { position: 'ASC', number: 'ASC' } }),
+      this.dataSource.getRepository(WorkflowState).find({ where: { projectId: project.id }, order: { position: 'ASC' } }),
+    ]);
     const dtos = await toTaskDtos(this.dataSource.manager, tasks);
     return {
       projectId: project.id,
-      columns: TASK_STATUSES.map((status) => ({ status, tasks: dtos.filter((t) => t.status === status) })),
+      // One column per workflow state; `status` is the state's category.
+      columns: states.map((st) => ({ status: st.category, state: toStateDto(st), tasks: dtos.filter((t) => t.stateId === st.id) })),
     };
   }
 
@@ -187,8 +222,9 @@ export class TasksService {
       await this.validateRefs(m, principal.organizationId, project.id, dto);
       await lockProject(m, project.id);
       const number = await nextTaskNumber(m, project.id);
-      const status = dto.status ?? TaskStatus.TODO;
-      const position = await m.count(Task, { where: { projectId: project.id, status } });
+      const state = dto.stateId || dto.status ? await resolveState(m, project.id, { stateId: dto.stateId, status: dto.status }) : await defaultState(m, project.id);
+      const status = state.category;
+      const position = await m.count(Task, { where: { projectId: project.id, stateId: state.id } });
       const entity = m.create(Task, {
         organizationId: principal.organizationId,
         projectId: project.id,
@@ -198,8 +234,10 @@ export class TasksService {
         description: dto.description ?? '',
         type: dto.type,
         status,
+        stateId: state.id,
         priority: dto.priority,
         position,
+        recurrence: dto.recurrence ?? null,
         assigneeId: dto.assigneeId ?? null,
         reporterId: principal.userId,
         sprintId: dto.sprintId ?? null,
@@ -234,7 +272,7 @@ export class TasksService {
 
       for (const field of EDITABLE) {
         const value = dto[field];
-        if (value !== undefined && value !== task[field]) {
+        if (value !== undefined && !same(value, task[field])) {
           changes[field] = { from: task[field], to: value };
           (task as any)[field] = value;
         }
@@ -253,15 +291,22 @@ export class TasksService {
         }
       }
 
-      if (dto.status && dto.status !== task.status) {
+      // A status (category) change keeps the task in its state if that state already matches.
+      const wantsState = dto.stateId ? dto.stateId !== task.stateId : !!dto.status && dto.status !== task.state.category;
+      if (wantsState) {
         await lockProject(m, task.projectId);
-        changes.status = { from: task.status, to: dto.status };
-        const from = task.status;
-        task.status = dto.status;
-        task.completedAt = dto.status === TaskStatus.DONE ? new Date() : null;
-        task.position = await m.count(Task, { where: { projectId: task.projectId, status: dto.status } });
+        const next = await resolveState(m, task.projectId, { stateId: dto.stateId, status: dto.status });
+        const from = task.state;
+        changes.state = { from: from.name, to: next.name };
+        changes.stateId = { from: from.id, to: next.id };
+        if (from.category !== next.category) changes.status = { from: from.category, to: next.category };
+        (task as any).state = undefined;
+        task.stateId = next.id;
+        task.status = next.category;
+        if (from.category !== next.category) task.completedAt = next.category === TaskStatus.DONE ? new Date() : null;
+        task.position = await m.count(Task, { where: { projectId: task.projectId, stateId: next.id } });
         await m.save(task);
-        await reorderColumn(m, task.projectId, from, task);
+        await reorderColumn(m, task.projectId, from.id, task);
       } else if (Object.keys(changes).length) {
         await m.save(task);
       }
@@ -299,17 +344,26 @@ export class TasksService {
       const found = await findTask(m, principal.organizationId, idOrKey);
       await lockProject(m, found.projectId);
       const task = await findTask(m, principal.organizationId, found.id); // re-read under lock
-      const from = { status: task.status, position: task.position };
+      if (!dto.stateId && !dto.status) throw ApiException.badRequest('VALIDATION_ERROR', 'Provide stateId or status');
+      const fromState = task.state;
+      const target = dto.stateId || dto.status !== fromState.category ? await resolveState(m, task.projectId, { stateId: dto.stateId, status: dto.status }) : fromState;
+      const from = { stateId: fromState.id, position: task.position };
       const changes: Record<string, FieldChange> = {};
-      if (from.status !== dto.status) {
-        changes.status = { from: from.status, to: dto.status };
-        task.status = dto.status;
-        task.completedAt = dto.status === TaskStatus.DONE ? new Date() : null;
+      if (target.id !== fromState.id) {
+        changes.state = { from: fromState.name, to: target.name };
+        changes.stateId = { from: fromState.id, to: target.id };
+        if (target.category !== fromState.category) {
+          changes.status = { from: fromState.category, to: target.category };
+          task.completedAt = target.category === TaskStatus.DONE ? new Date() : null;
+        }
+        (task as any).state = undefined;
+        task.stateId = target.id;
+        task.status = target.category;
       }
-      await reorderColumn(m, task.projectId, dto.status, undefined, { task, index: dto.position });
-      if (task.position !== from.position || changes.status) changes.position = { from: from.position, to: task.position };
+      await reorderColumn(m, task.projectId, target.id, undefined, { task, index: dto.position });
+      if (task.position !== from.position || changes.stateId) changes.position = { from: from.position, to: task.position };
       await m.save(task);
-      if (changes.status) await reorderColumn(m, task.projectId, from.status, task);
+      if (changes.stateId) await reorderColumn(m, task.projectId, from.stateId, task);
       return { task: await findTask(m, principal.organizationId, task.id), changes };
     });
     const dto$ = await taskDto(this.dataSource.manager, task);
@@ -329,7 +383,7 @@ export class TasksService {
       const task = await findTask(m, principal.organizationId, idOrKey);
       await lockProject(m, task.projectId);
       await m.delete(Task, { id: task.id });
-      await reorderColumn(m, task.projectId, task.status);
+      await reorderColumn(m, task.projectId, task.stateId);
       return task;
     });
     this.events.publish('TASK_DELETED', {

@@ -21,6 +21,9 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
     case 'TASK_UPDATED': {
       const fields = Object.keys(d.changes).filter((f) => f !== 'position');
       if (!fields.length) return null; // pure re-order within a column
+      if (d.changes.state) {
+        return { summary: `moved ${d.task.key} from ${d.changes.state.from} to ${d.changes.state.to}`, taskId: d.task.id };
+      }
       if (d.changes.status) {
         return { summary: `moved ${d.task.key} from ${label(d.changes.status.from)} to ${label(d.changes.status.to)}`, taskId: d.task.id };
       }
@@ -60,6 +63,10 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
       return { summary: `deleted doc “${d.document.title}”` };
     case 'GOAL_CREATED':
       return { summary: `created goal “${d.goal.title}”` };
+    case 'WORKFLOW_UPDATED':
+      return { summary: `updated the workflow (${d.states.map((st: { name: string }) => st.name).join(' → ')})` };
+    case 'TASK_RECURRED':
+      return { summary: `completed ${d.task.key}; next occurrence ${d.next.key} is due ${d.next.dueDate ?? 'soon'} (${d.rule})`, taskId: d.next.id };
     case 'AUTOMATION_RAN':
       return d.actions.length ? { summary: `ran on ${d.task.key} (${d.actions.map((a: string) => label(a)).join(', ')})`, taskId: d.task.id } : null;
     default:

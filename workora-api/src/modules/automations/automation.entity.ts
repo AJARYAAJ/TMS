@@ -3,6 +3,7 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeor
 export type AutomationTrigger =
   | { event: 'TASK_CREATED' }
   | { event: 'STATUS_CHANGED'; from?: string; to?: string }
+  | { event: 'STATE_CHANGED'; to?: string }
   | { event: 'PRIORITY_CHANGED'; to?: string }
   | { event: 'ASSIGNED' }
   | { event: 'COMMENT_ADDED' }
@@ -16,6 +17,7 @@ export interface AutomationConditions {
 
 export type AutomationAction =
   | { type: 'SET_STATUS'; status: string }
+  | { type: 'SET_STATE'; stateId: string }
   | { type: 'SET_PRIORITY'; priority: string }
   | { type: 'ASSIGN'; userId: string }
   | { type: 'ASSIGN_REPORTER' }

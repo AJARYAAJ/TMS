@@ -12,6 +12,7 @@ import { ApiException } from '../../common/http/api-exception';
 import { CommentsModule, CommentsService } from '../comments/comments.module';
 import { Label } from '../labels/label.entity';
 import { Membership } from '../organizations/membership.entity';
+import { WorkflowState } from '../workflow/workflow-state.entity';
 import { findProject } from '../projects/projects.service';
 import { Sprint, SprintStatus } from '../sprints/sprint.entity';
 import { TASK_STATUSES, TaskPriority } from '../tasks/task.entity';
@@ -36,7 +37,7 @@ class UpdateAutomationDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
-const TRIGGERS = ['TASK_CREATED', 'STATUS_CHANGED', 'PRIORITY_CHANGED', 'ASSIGNED', 'COMMENT_ADDED', 'TASK_OVERDUE'];
+const TRIGGERS = ['TASK_CREATED', 'STATUS_CHANGED', 'STATE_CHANGED', 'PRIORITY_CHANGED', 'ASSIGNED', 'COMMENT_ADDED', 'TASK_OVERDUE'];
 const PRIORITIES = Object.values(TaskPriority) as string[];
 
 const toDto = (a: Automation) => ({
@@ -137,6 +138,7 @@ export class AutomationsService {
         const out: { event: string; from?: string; to?: string }[] = [];
         const c = e.data.changes ?? {};
         if (c.status) out.push({ event: 'STATUS_CHANGED', from: c.status.from, to: c.status.to });
+        if (c.stateId) out.push({ event: 'STATE_CHANGED', from: c.stateId.from, to: c.stateId.to });
         if (c.priority) out.push({ event: 'PRIORITY_CHANGED', from: c.priority.from, to: c.priority.to });
         return out;
       }
@@ -195,6 +197,8 @@ export class AutomationsService {
     switch (a.type) {
       case 'SET_STATUS':
         return task.status === a.status ? task : this.tasks.update(p, task.id, { status: a.status as any });
+      case 'SET_STATE':
+        return task.stateId === a.stateId ? task : this.tasks.update(p, task.id, { stateId: a.stateId });
       case 'SET_PRIORITY':
         return task.priority === a.priority ? task : this.tasks.update(p, task.id, { priority: a.priority as any });
       case 'ASSIGN':
@@ -232,6 +236,7 @@ export class AutomationsService {
     const t = trigger as any;
     if (trigger.event === 'STATUS_CHANGED' && ((t.to && !TASK_STATUSES.includes(t.to)) || (t.from && !TASK_STATUSES.includes(t.from)))) throw bad('Invalid status in trigger');
     if (trigger.event === 'PRIORITY_CHANGED' && t.to && !PRIORITIES.includes(t.to)) throw bad('Invalid priority in trigger');
+    if (trigger.event === 'STATE_CHANGED' && t.to && !(await this.dataSource.getRepository(WorkflowState).existsBy({ organizationId: orgId, id: t.to }))) throw bad('Invalid state in trigger');
     if (conditions.priority && !PRIORITIES.includes(conditions.priority)) throw bad('Invalid priority condition');
     if (!Array.isArray(actions) || !actions.length || actions.length > 10) throw bad('Provide between 1 and 10 actions');
     for (const a of actions as any[]) {
@@ -241,6 +246,9 @@ export class AutomationsService {
           break;
         case 'SET_PRIORITY':
           if (!PRIORITIES.includes(a.priority)) throw bad('SET_PRIORITY needs a valid priority');
+          break;
+        case 'SET_STATE':
+          if (!(await this.dataSource.getRepository(WorkflowState).existsBy({ organizationId: orgId, id: a.stateId }))) throw bad('SET_STATE needs a valid stateId');
           break;
         case 'ASSIGN':
           if (!(await this.dataSource.getRepository(Membership).existsBy({ organizationId: orgId, userId: a.userId }))) throw bad('ASSIGN needs a member userId');

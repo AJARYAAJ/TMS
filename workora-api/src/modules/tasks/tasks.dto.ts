@@ -1,9 +1,17 @@
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { toStateDto } from '../workflow/workflow-state.entity';
 import { toLabelDto } from '../labels/label.entity';
 import { TaskLinkType } from './task-link.entity';
 import { toUserSummary } from '../users/user.entity';
 import { Task, TaskPriority, TaskStatus, TaskType } from './task.entity';
+
+export class RecurrenceDto {
+  @IsIn(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']) freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  @IsOptional() @IsInt() @Min(1) @Max(365) interval?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(7) @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) byWeekday?: number[];
+  @IsOptional() @IsDateString() endDate?: string | null;
+}
 
 export class CreateTaskDto {
   /** Project UUID or key. */
@@ -18,6 +26,9 @@ export class CreateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000) storyPoints?: number | null;
   @IsOptional() @IsDateString() startDate?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  /** Workflow state; takes precedence over `status` (which picks the first state of that category). */
+  @IsOptional() @IsUUID() stateId?: string;
+  @IsOptional() @ValidateNested() @Type(() => RecurrenceDto) recurrence?: RecurrenceDto | null;
   @IsOptional() @IsUUID() parentId?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
@@ -35,13 +46,19 @@ export class UpdateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000) storyPoints?: number | null;
   @IsOptional() @IsDateString() startDate?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  /** Workflow state; takes precedence over `status` (which picks the first state of that category). */
+  @IsOptional() @IsUUID() stateId?: string;
+  @IsOptional() @ValidateNested() @Type(() => RecurrenceDto) recurrence?: RecurrenceDto | null;
   @IsOptional() @IsUUID() parentId?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
 }
 
 export class MoveTaskDto {
-  @IsEnum(TaskStatus) status: TaskStatus;
+  /** Destination workflow state (preferred) … */
+  @IsOptional() @IsUUID() stateId?: string;
+  /** … or a status category (first state of that category). */
+  @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
   /** Zero-based index within the destination column. */
   @IsInt() @Min(0) position: number;
 }
@@ -57,6 +74,7 @@ export class ListTasksQuery {
   @IsOptional() @IsEnum(TaskType) type?: TaskType;
   @IsOptional() @IsEnum(TaskPriority) priority?: TaskPriority;
   @IsOptional() @IsUUID() labelId?: string;
+  @IsOptional() @IsUUID() stateId?: string;
   /** Parent task UUID, or `none` for top-level tasks only. */
   @IsOptional() @Matches(/^(none|[0-9a-fA-F-]{36})$/) parentId?: string;
   @IsOptional() @IsString() @MaxLength(200) q?: string;
@@ -114,6 +132,10 @@ export function toTaskDto(t: Task, stats: TaskStats = EMPTY_STATS) {
     startDate: t.startDate,
     dueDate: t.dueDate,
     completedAt: t.completedAt,
+    stateId: t.stateId,
+    state: t.state ? toStateDto(t.state) : null,
+    recurrence: t.recurrence,
+    seriesId: t.seriesId,
     parentId: t.parentId,
     parent: t.parent ? { id: t.parent.id, key: t.parent.key, title: t.parent.title, type: t.parent.type } : null,
     estimateMinutes: t.estimateMinutes,
