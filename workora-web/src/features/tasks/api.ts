@@ -3,7 +3,7 @@ import { toast } from '@/components/ui/toast';
 import { api, errorMessage } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
 import { useSessionStore } from '@/features/auth/session.store';
-import type { Activity, Attachment, Board, Comment, Label, Task, TaskDetail, TaskLinkItem, TaskPriority, TaskStatus, TaskType, TimeEntry, UserSummary } from '@/types';
+import type { Activity, Attachment, Board, Comment, Label, Task, TaskDetail, TaskLinkItem, TaskPriority, TaskType, TimeEntry, UserSummary, WorkflowState } from '@/types';
 import { findCachedTask, invalidateTaskViews, patchCachedTask, removeCachedTask, snapshotTaskCaches } from './cache';
 
 export interface TaskFilters {
@@ -15,6 +15,7 @@ export interface TaskFilters {
   priority?: TaskPriority;
   q?: string;
   labelId?: string;
+  stateId?: string;
   parentId?: string;
   open?: 'true' | 'false';
   dueFrom?: string;
@@ -25,7 +26,7 @@ export interface TaskFilters {
   size?: number;
 }
 
-export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'type' | 'status' | 'priority' | 'sprintId' | 'storyPoints' | 'startDate' | 'dueDate' | 'parentId' | 'estimateMinutes'>> & {
+export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'type' | 'status' | 'stateId' | 'priority' | 'sprintId' | 'storyPoints' | 'startDate' | 'dueDate' | 'parentId' | 'estimateMinutes' | 'recurrence'>> & {
   assigneeId?: string | null;
   labelIds?: string[];
 };
@@ -96,8 +97,8 @@ export function useUpdateTask() {
 export function useMoveTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ task, status, position }: { task: Task; status: TaskStatus; position: number; rollback: () => void }) =>
-      api.patch<Task>(`/tasks/${task.id}/status`, { status, position }),
+    mutationFn: ({ task, stateId, position }: { task: Task; stateId: string; position: number; rollback: () => void }) =>
+      api.patch<Task>(`/tasks/${task.id}/status`, { stateId, position }),
     onError: (_err, { rollback }) => {
       rollback();
       toast.error("Couldn't move task. Please try again.");
@@ -314,5 +315,38 @@ export function useTimer() {
       onSuccess: () => refresh(),
       onError: (e) => toast.error(errorMessage(e)),
     }),
+  };
+}
+
+/* ─────────── Workflow ─────────── */
+
+export function useWorkflow(projectId: string | undefined) {
+  return useQuery({ queryKey: qk.workflow(projectId ?? ''), queryFn: () => api.get<WorkflowState[]>(`/projects/${projectId}/workflow`), enabled: !!projectId, staleTime: 60_000 });
+}
+
+export function useWorkflowMutations(projectId: string) {
+  const qc = useQueryClient();
+  const done = (states: WorkflowState[]) => {
+    qc.setQueryData(qk.workflow(projectId), states);
+    invalidateTaskViews(qc, projectId);
+  };
+  const opts = { onSuccess: done, onError: (e: unknown) => toast.error(errorMessage(e)) };
+  return {
+    create: useMutation({ mutationFn: (b: { name: string; category: string; color?: string; wipLimit?: number | null; position?: number }) => api.post<WorkflowState[]>(`/projects/${projectId}/workflow/states`, b), ...opts }),
+    update: useMutation({ mutationFn: ({ id, ...b }: { id: string; name?: string; category?: string; color?: string; wipLimit?: number | null }) => api.patch<WorkflowState[]>(`/workflow-states/${id}`, b), ...opts }),
+    reorder: useMutation({
+      mutationFn: (stateIds: string[]) => api.patch<WorkflowState[]>(`/projects/${projectId}/workflow/order`, { stateIds }),
+      onMutate: (ids: string[]) => {
+        const prev = qc.getQueryData<WorkflowState[]>(qk.workflow(projectId));
+        if (prev) qc.setQueryData(qk.workflow(projectId), ids.map((id, i) => ({ ...prev.find((s) => s.id === id)!, position: i })));
+        return { prev };
+      },
+      onSuccess: done,
+      onError: (e: unknown, _ids: string[], ctx?: { prev?: WorkflowState[] }) => {
+        if (ctx?.prev) qc.setQueryData(qk.workflow(projectId), ctx.prev);
+        toast.error(errorMessage(e));
+      },
+    }),
+    remove: useMutation({ mutationFn: ({ id, moveTo }: { id: string; moveTo?: string }) => api.delete<WorkflowState[]>(`/workflow-states/${id}${moveTo ? `?moveTo=${moveTo}` : ''}`), ...opts }),
   };
 }

@@ -15,8 +15,13 @@ export function Avatar({ user, size = 24 }: { user: Pick<UserSummary, 'id' | 'na
   );
 }
 
-export function StatusBadge({ status }: { status: TaskStatus }) {
-  return <span className={`badge status-${status.toLowerCase()}`}>{STATUS_LABEL[status]}</span>;
+/** Shows the workflow state (custom name & colour) when known, else the status category. */
+export function StatusBadge({ status, state }: { status: TaskStatus; state?: { name: string; color: string } | null }) {
+  return (
+    <span className={`badge status-${status.toLowerCase()}`} style={state ? ({ ['--st' as any]: state.color } as React.CSSProperties) : undefined}>
+      {state?.name ?? STATUS_LABEL[status]}
+    </span>
+  );
 }
 
 const PRIORITY_ICON = { URGENT: ChevronsUp, HIGH: ArrowUp, MEDIUM: Minus, LOW: ArrowDown };

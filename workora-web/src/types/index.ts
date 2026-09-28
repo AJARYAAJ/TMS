@@ -62,6 +62,10 @@ export interface Task {
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
+  stateId: string;
+  state: WorkflowState | null;
+  recurrence: Recurrence | null;
+  seriesId: string | null;
   parentId: string | null;
   parent: { id: string; key: string; title: string; type: TaskType } | null;
   estimateMinutes: number | null;
@@ -190,9 +194,26 @@ export interface RoadmapItem {
   assignee: { id: string; name: string } | null;
 }
 
+export interface WorkflowState {
+  id: string;
+  name: string;
+  category: TaskStatus;
+  color: string;
+  position: number;
+  wipLimit: number | null;
+  taskCount?: number;
+}
+
+export interface Recurrence {
+  freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  interval?: number;
+  byWeekday?: number[];
+  endDate?: string | null;
+}
+
 export interface Board {
   projectId: string;
-  columns: { status: TaskStatus; tasks: Task[] }[];
+  columns: { status: TaskStatus; state: WorkflowState; tasks: Task[] }[];
 }
 
 export interface Sprint {

@@ -114,6 +114,16 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
     case 'GOAL_UPDATED':
       qc.invalidateQueries({ queryKey: qk.goals });
       break;
+    case 'WORKFLOW_UPDATED':
+      if (e.projectId) {
+        qc.setQueryData(qk.workflow(e.projectId), e.data.states);
+        invalidateTaskViews(qc, e.projectId);
+      }
+      break;
+    case 'TASK_RECURRED':
+      toast.info(`${e.data.task.key} repeats — ${e.data.next.key} is due ${e.data.next.dueDate ?? 'soon'}`);
+      if (e.projectId) invalidateTaskViews(qc, e.projectId);
+      break;
     case 'AUTOMATION_RAN':
       if (e.projectId) qc.invalidateQueries({ queryKey: qk.automations(e.projectId) });
       qc.invalidateQueries({ queryKey: qk.comments(e.data.task.key) });

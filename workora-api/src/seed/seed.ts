@@ -20,6 +20,7 @@ import { KeyResultKind } from '../modules/goals/goal.entity';
 import { Label } from '../modules/labels/label.entity';
 import { TaskLinkType } from '../modules/tasks/task-link.entity';
 import { TimeService } from '../modules/time/time.module';
+import { WorkflowService } from '../modules/workflow/workflow.module';
 
 const PASSWORD = 'workora123';
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -207,6 +208,20 @@ async function main() {
     actions: [{ type: 'ASSIGN', userId: R.userId }, { type: 'ADD_LABEL', labelId: lBackend.id }],
   });
   await db.query('INSERT INTO favorites (user_id, project_id) VALUES ($1, $2), ($1, $3)', [owner.userId, ecom.id, mobile.id]);
+
+  // ── Custom workflow for ECOM: Code review → QA → Done, WIP limit on In progress
+  const workflow = app.get(WorkflowService);
+  let states = await workflow.list(owner.organizationId, ecom.id);
+  const byName = (n: string) => states.find((st) => st.name === n)!;
+  await workflow.update(owner, byName('In review').id, { name: 'Code review' });
+  await workflow.update(owner, byName('In progress').id, { wipLimit: 3 });
+  states = await workflow.create(owner, ecom.id, { name: 'QA', category: TaskStatus.IN_REVIEW, color: '#ec4899', position: 3, wipLimit: 2 });
+  await tasks.update(owner, created['Order confirmation emails'], { stateId: byName('QA').id });
+
+  // ── Recurring work
+  await tasks.create(R, { projectId: ecom.id, title: 'Weekly dependency updates', assigneeId: R.userId, dueDate: day(((8 - new Date().getDay()) % 7) || 7), recurrence: { freq: 'WEEKLY', byWeekday: [1] }, priority: TaskPriority.MEDIUM, labelIds: [lBackend.id] });
+  await tasks.create(owner, { projectId: ecom.id, title: 'Reconcile payment provider invoices', assigneeId: owner.userId, dueDate: day(5), recurrence: { freq: 'MONTHLY' }, labelIds: [lPayments.id] });
+  await tasks.create(P, { projectId: mobile.id, title: 'Triage crash reports', assigneeId: P.userId, dueDate: day(1), recurrence: { freq: 'WEEKLY', byWeekday: [1, 2, 3, 4, 5] } });
 
   // ── History: finished work spread over the last ~10 weeks (feeds the Momentum heatmap)
   const chores = ['Crash reporting', 'Deep links', 'Onboarding copy', 'Dark mode polish', 'Icon set', 'Push opt-in', 'Analytics events', 'Splash screen', 'Settings screen', 'Accessibility audit', 'Image caching', 'Error states', 'Release notes', 'Beta invites'];

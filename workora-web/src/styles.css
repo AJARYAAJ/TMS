@@ -2538,7 +2538,8 @@ a.project-card:hover {
 /* ─────────────── Board ─────────────── */
 .board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(272px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 1fr);
   gap: 16px;
   overflow-x: auto;
   align-items: start;
@@ -2690,6 +2691,33 @@ a.project-card:hover {
   min-width: 200px;
   max-width: 360px;
   margin-left: auto;
+}
+
+/* Custom workflow columns */
+.board-column.over-limit .board-column-header {
+  box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--danger);
+}
+.board-column-header .count {
+  white-space: nowrap;
+}
+.count-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.col-category {
+  font: 700 9.5px var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.card-repeat {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.prop-on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* Calendar */
@@ -3863,6 +3891,207 @@ a.project-card:hover {
 }
 .deliveries {
   margin-top: 8px;
+}
+
+/* ─────────────── Recurrence picker ─────────────── */
+.repeat-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding: 10px 8px 6px;
+}
+.repeat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.repeat-row input[type='number'] {
+  width: 64px;
+}
+.repeat-row select,
+.repeat-row input[type='date'] {
+  flex: 1;
+}
+.weekday-toggles {
+  display: flex;
+  gap: 4px;
+}
+.weekday-toggles button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--surface-3);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.weekday-toggles button.on {
+  background: var(--ink);
+  color: var(--volt);
+}
+
+/* ─────────────── Workflow editor ─────────────── */
+.workflow-flow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.workflow-flow > svg {
+  color: var(--volt);
+  flex-shrink: 0;
+}
+.flow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--on-ink) 10%, transparent);
+  font-weight: 600;
+  font-size: 13px;
+}
+.flow-chip small {
+  color: var(--volt);
+  font-weight: 700;
+}
+.flow-arrow {
+  opacity: 0.45;
+}
+.workflow-help {
+  margin: 0 0 14px 4px;
+  max-width: 760px;
+}
+.state-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.state-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 8px;
+  border-left: 5px solid var(--st);
+  flex-wrap: wrap;
+}
+.state-row.dragging {
+  opacity: 0.6;
+  box-shadow: var(--shadow-3);
+  z-index: 2;
+  position: relative;
+}
+.drag-handle {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: grab;
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: 8px;
+}
+.drag-handle:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.drag-handle:disabled {
+  cursor: default;
+}
+.swatch-picker {
+  position: relative;
+}
+.swatch-current {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--st);
+  cursor: pointer;
+}
+.swatch-pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -6px;
+  z-index: 20;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: var(--shadow-3), 0 0 0 1px var(--line);
+  grid-template-columns: repeat(6, 22px);
+  gap: 6px;
+}
+.swatch-picker:hover .swatch-pop,
+.swatch-picker:focus-within .swatch-pop {
+  display: grid;
+}
+.swatch-pop button {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 0;
+  cursor: pointer;
+}
+.swatch-pop button[aria-checked='true'] {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink);
+}
+.state-name {
+  flex: 1;
+  min-width: 140px;
+  font: 600 15px var(--font-display);
+  background: transparent;
+}
+.wip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 10.5px var(--font-body);
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.wip input {
+  width: 64px;
+}
+.state-count {
+  min-width: 60px;
+  text-align: right;
+}
+.state-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.state-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--ink-3);
+}
+.state-add input {
+  flex: 1;
 }
 
 /* ─────────────── Responsive ─────────────── */

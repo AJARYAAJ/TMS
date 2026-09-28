@@ -46,7 +46,7 @@ export function TaskRow({ task, extra, selected, onSelect }: { task: Task; extra
       </span>
       {extra}
       <PriorityIcon priority={task.priority} />
-      <StatusBadge status={task.status} />
+      <StatusBadge status={task.status} state={task.state} />
       <span className={`due${isOverdue(task.dueDate, task.status) ? ' overdue' : ''}`}>{formatDate(task.dueDate)}</span>
       <Avatar user={task.assignee} size={22} />
     </div>

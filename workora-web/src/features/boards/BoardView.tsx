@@ -14,7 +14,7 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, CheckSquare, Clock, MessageSquare, Plus } from 'lucide-react';
+import { AlertOctagon, CheckSquare, Clock, MessageSquare, Plus, Repeat } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUiStore } from '@/app/ui.store';
 import { Avatar, formatMinutes, LabelChip, PriorityIcon, Skeleton, TypeIcon } from '@/components/ui';
@@ -22,10 +22,10 @@ import { useCan } from '@/features/auth/session.store';
 import { useBoard, useMoveTask } from '@/features/tasks/api';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
 import { qk } from '@/services/api/keys';
-import type { Board, Task, TaskStatus } from '@/types';
+import type { Board, Task, WorkflowState } from '@/types';
 import { formatDate, isOverdue, STATUS_LABEL } from '@/utils/format';
 
-const colId = (s: TaskStatus) => `col:${s}`;
+const colId = (stateId: string) => `col:${stateId}`;
 
 /**
  * Kanban board. Dragging updates the cached board immediately (optimistic UI); the
@@ -45,8 +45,8 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
   if (isLoading || !board) return <BoardSkeleton />;
 
   const columnOf = (b: Board, id: string) => {
-    if (id.startsWith('col:')) return id.slice(4) as TaskStatus;
-    return b.columns.find((c) => c.tasks.some((t) => t.id === id))?.status;
+    if (id.startsWith('col:')) return id.slice(4);
+    return b.columns.find((c) => c.tasks.some((t) => t.id === id))?.state.id;
   };
   const setBoard = (fn: (b: Board) => Board) => qc.setQueryData<Board>(queryKey, (b) => (b ? fn(b) : b));
 
@@ -63,15 +63,15 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
       const from = columnOf(b, String(active.id));
       const to = columnOf(b, String(over.id));
       if (!from || !to || from === to) return b;
-      const task = b.columns.find((c) => c.status === from)!.tasks.find((t) => t.id === active.id)!;
+      const task = b.columns.find((c) => c.state.id === from)!.tasks.find((t) => t.id === active.id)!;
       return {
         ...b,
         columns: b.columns.map((c) => {
-          if (c.status === from) return { ...c, tasks: c.tasks.filter((t) => t.id !== active.id) };
-          if (c.status !== to) return c;
+          if (c.state.id === from) return { ...c, tasks: c.tasks.filter((t) => t.id !== active.id) };
+          if (c.state.id !== to) return c;
           const overIndex = c.tasks.findIndex((t) => t.id === over.id);
           const tasks = [...c.tasks];
-          tasks.splice(overIndex >= 0 ? overIndex : tasks.length, 0, { ...task, status: to });
+          tasks.splice(overIndex >= 0 ? overIndex : tasks.length, 0, { ...task, stateId: c.state.id, state: c.state, status: c.state.category });
           return { ...c, tasks };
         }),
       };
@@ -84,14 +84,14 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
     if (!over || !before) return;
     let final: Board | undefined;
     setBoard((b) => {
-      const status = columnOf(b, String(active.id));
-      if (!status) return b;
+      const stateId = columnOf(b, String(active.id));
+      if (!stateId) return b;
       final = {
         ...b,
         columns: b.columns.map((c) => {
-          if (c.status !== status) return c;
+          if (c.state.id !== stateId) return c;
           const from = c.tasks.findIndex((t) => t.id === active.id);
-          const to = over.id === colId(status) ? c.tasks.length - 1 : c.tasks.findIndex((t) => t.id === over.id);
+          const to = over.id === colId(stateId) ? c.tasks.length - 1 : c.tasks.findIndex((t) => t.id === over.id);
           return { ...c, tasks: to >= 0 && from !== to ? arrayMove(c.tasks, from, to) : c.tasks };
         }),
       };
@@ -102,11 +102,11 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
     const original = before.columns.flatMap((c) => c.tasks).find((t) => t.id === active.id)!;
     const column = final.columns.find((c) => c.tasks.some((t) => t.id === active.id))!;
     const index = column.tasks.findIndex((t) => t.id === active.id);
-    const position = serverPosition(column.tasks, index, original, column.status);
-    if (column.status === original.status && position === original.position) return;
+    const position = serverPosition(column.tasks, index, original, column.state.id);
+    if (column.state.id === original.stateId && position === original.position) return;
 
     const rollbackTo = before;
-    move.mutate({ task: original, status: column.status, position, rollback: () => qc.setQueryData(queryKey, rollbackTo) });
+    move.mutate({ task: original, stateId: column.state.id, position, rollback: () => qc.setQueryData(queryKey, rollbackTo) });
   };
 
   const onDragCancel = () => {
@@ -121,7 +121,7 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
       {total === 0 && emptyHint && <p className="muted small board-hint">{emptyHint}</p>}
       <div className="board">
         {board.columns.map((col) => (
-          <Column key={col.status} projectId={projectId} sprintId={sprintId} status={col.status} tasks={col.tasks} canEdit={canEdit} />
+          <Column key={col.state.id} projectId={projectId} sprintId={sprintId} state={col.state} tasks={col.tasks} canEdit={canEdit} />
         ))}
       </div>
       <DragOverlay>{activeTask ? <Card task={activeTask} overlay /> : null}</DragOverlay>
@@ -133,8 +133,8 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
  * Converts an index in the (possibly sprint-filtered) column into the server's position
  * within the full column, using the neighbouring cards' server positions.
  */
-function serverPosition(tasks: Task[], index: number, original: Task, status: TaskStatus) {
-  const sameColumn = original.status === status;
+function serverPosition(tasks: Task[], index: number, original: Task, stateId: string) {
+  const sameColumn = original.stateId === stateId;
   const adjust = (neighbourPos: number) => (sameColumn && original.position < neighbourPos ? -1 : 0);
   const next = tasks[index + 1];
   if (next) return next.position + adjust(next.position);
@@ -143,17 +143,21 @@ function serverPosition(tasks: Task[], index: number, original: Task, status: Ta
   return 0;
 }
 
-function Column({ projectId, sprintId, status, tasks, canEdit }: { projectId: string; sprintId?: string; status: TaskStatus; tasks: Task[]; canEdit: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id: colId(status), data: { type: 'column' } });
+function Column({ projectId, sprintId, state, tasks, canEdit }: { projectId: string; sprintId?: string; state: WorkflowState; tasks: Task[]; canEdit: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: colId(state.id), data: { type: 'column' } });
   const openCreateTask = useUiStore((s) => s.openCreateTask);
+  const overLimit = state.wipLimit !== null && tasks.length > state.wipLimit;
   return (
-    <section className={`board-column${isOver ? ' over' : ''}`} aria-label={STATUS_LABEL[status]}>
-      <header className="board-column-header">
-        <span className={`status-dot status-${status.toLowerCase()}`} />
-        {STATUS_LABEL[status]}
-        <span className="count">{tasks.length}</span>
+    <section className={`board-column${isOver ? ' over' : ''}${overLimit ? ' over-limit' : ''}`} aria-label={state.name} style={{ ['--st' as any]: state.color }}>
+      <header className="board-column-header" title={`${state.name} · ${STATUS_LABEL[state.category]} category${state.wipLimit ? ` · WIP limit ${state.wipLimit}` : ''}`}>
+        <span className="status-dot" />
+        <span className="ellipsis">{state.name}</span>
+        <span className={`count${overLimit ? ' count-danger' : ''}`} title={state.wipLimit ? `WIP limit ${state.wipLimit}` : undefined}>
+          {tasks.length}
+          {state.wipLimit ? ` / ${state.wipLimit}` : ''}
+        </span>
         {canEdit && (
-          <button className="icon-btn ml-auto" title={`Add task to ${STATUS_LABEL[status]}`} onClick={() => openCreateTask({ projectId, status, sprintId })}>
+          <button className="icon-btn ml-auto" title={`Add task to ${state.name}`} onClick={() => openCreateTask({ projectId, status: state.category, stateId: state.id, sprintId })}>
             <Plus size={14} />
           </button>
         )}
@@ -184,6 +188,7 @@ function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
   return (
     <article
       className={`task-card status-${task.status.toLowerCase()} prio-${task.priority.toLowerCase()}${overlay ? ' overlay' : ''}${task.blockedBy ? ' blocked' : ''}`}
+      style={task.state ? { ['--st' as any]: task.state.color } : undefined}
       onClick={() => !overlay && openTask(task.key)}
       onKeyDown={(e) => e.key === 'Enter' && openTask(task.key)}
     >
@@ -191,6 +196,7 @@ function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
         <TypeIcon type={task.type} />
         <span className="mono">{task.key}</span>
         {task.parent && <span className="card-epic ellipsis" title={task.parent.title}>{task.parent.title}</span>}
+        {task.recurrence && <Repeat size={12} className="card-repeat" aria-label="Recurring task" />}
         <span className="ml-auto">
           <PriorityIcon priority={task.priority} />
         </span>

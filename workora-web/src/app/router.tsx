@@ -28,6 +28,7 @@ const RoadmapPage = lazy(() => import('@/features/roadmap/RoadmapPage'));
 const TimePage = lazy(() => import('@/features/time/TimePage'));
 const InboxPage = lazy(() => import('@/features/inbox/InboxPage'));
 const AutomationsView = lazy(() => import('@/features/automations/AutomationsView'));
+const WorkflowView = lazy(() => import('@/features/workflow/WorkflowView'));
 
 export const router = createBrowserRouter(
   [
@@ -61,6 +62,7 @@ export const router = createBrowserRouter(
             { path: 'documents', element: <Navigate to="../docs" replace /> },
             { path: 'reports', element: <ReportsView /> },
             { path: 'automations', element: <AutomationsView /> },
+            { path: 'workflow', element: <WorkflowView /> },
           ],
         },
         { path: 'teams', element: <TeamsPage /> },

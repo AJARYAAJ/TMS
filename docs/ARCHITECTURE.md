@@ -56,6 +56,8 @@ subscribers. Modules talk to each other through the event bus rather than callin
 | `automations` | rule engine subscribed to the event bus |
 | `integrations` | outgoing webhooks (own BullMQ queue, HMAC signatures, delivery log) |
 | `favorites`, `roadmap` | starred projects; epics across projects on a time axis |
+| `workflow` | per-project workflow states (board columns) mapped to status categories |
+| `recurrence` | recurring-task rules and next-occurrence creation |
 
 ### Request pipeline
 
@@ -77,9 +79,28 @@ organization. A lookup by id or key in another tenant returns 404, never 403, so
 reveal that the resource exists. A user can belong to several organizations and switches between
 them with `POST /auth/switch-organization`.
 
+### Workflows
+
+Each project owns an ordered list of `workflow_states` (name, colour, WIP limit) and every state
+belongs to one of four **status categories**: `TODO`, `IN_PROGRESS`, `IN_REVIEW` or `DONE`. A task
+points at a state (`state_id`), and `tasks.status` always mirrors that state's category. Board
+columns are states. Reports, sprint completion, "done" timestamps, overdue checks and `STATUS_CHANGED`
+automations all reason about categories, so teams can rename, add and reorder states without breaking
+anything. Changing a state's category re-syncs its tasks. Deleting a state requires a `moveTo` target
+when it still has tasks. Automations can also trigger on `STATE_CHANGED` and run `SET_STATE`.
+
+### Recurring tasks
+
+`tasks.recurrence` holds a rule (`freq` DAILY/WEEKLY/MONTHLY/YEARLY, `interval`, `byWeekday`,
+`endDate`). `RecurrenceService` subscribes to `TASK_UPDATED`. When an occurrence enters a done-category
+state (via drag, bulk edit, automation or API), it atomically claims `recurrence_spawned_at` and creates
+the next occurrence. Dates are advanced by the rule and never land in the past. Assignee, labels, estimate,
+epic and an open sprint carry over, and every occurrence shares a `series_id`. Rule maths lives in a pure
+module (`recurrence.ts`) with its own unit tests.
+
 ### Board ordering
 
-Each task has a dense, zero-based `position` within its `(project, status)` column.
+Each task has a dense, zero-based `position` within its `(project, workflow state)` column.
 `PATCH /tasks/:id/status { status, position }` locks the project row (`SELECT … FOR UPDATE`),
 removes the task from its old column, inserts it at `position` in the new one, and rewrites both
 columns' positions. That serializes concurrent drags within a project.

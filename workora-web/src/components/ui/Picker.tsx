@@ -92,6 +92,8 @@ export function Picker<V extends string>({ value, options, onChange, children, l
           role="listbox"
           aria-label={label}
           onKeyDown={(e) => {
+            // Keys typed inside a footer form (e.g. a custom rule) belong to that form.
+            if (e.key !== 'Escape' && (e.target as HTMLElement).closest('form')) return;
             if (e.key === 'Escape') {
               e.stopPropagation();
               setOpen(false);

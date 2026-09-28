@@ -7,6 +7,7 @@ type Theme = 'light' | 'dark' | 'system';
 interface CreateTaskIntent {
   projectId?: string;
   status?: TaskStatus;
+  stateId?: string;
   sprintId?: string | null;
 }
 

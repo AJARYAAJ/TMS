@@ -6,7 +6,7 @@ import { toast } from '@/components/ui/toast';
 import { useCan } from '@/features/auth/session.store';
 import { useProjectContext } from '@/features/projects/ProjectLayout';
 import { useUsers } from '@/features/projects/api';
-import { useLabels } from '@/features/tasks/api';
+import { useLabels, useWorkflow } from '@/features/tasks/api';
 import { api, errorMessage } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
 import { Automation, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from '@/types';
@@ -16,7 +16,8 @@ type Action = Automation['actions'][number];
 
 const TRIGGERS: Record<string, string> = {
   TASK_CREATED: 'a task is created',
-  STATUS_CHANGED: 'status changes',
+  STATUS_CHANGED: 'status category changes',
+  STATE_CHANGED: 'a task enters a state',
   PRIORITY_CHANGED: 'priority changes',
   ASSIGNED: 'a task is assigned',
   COMMENT_ADDED: 'someone comments',
@@ -24,7 +25,8 @@ const TRIGGERS: Record<string, string> = {
 };
 
 const ACTIONS: Record<string, string> = {
-  SET_STATUS: 'Set status',
+  SET_STATE: 'Move to state',
+  SET_STATUS: 'Set status category',
   SET_PRIORITY: 'Set priority',
   ASSIGN: 'Assign to',
   ASSIGN_REPORTER: 'Assign to reporter',
@@ -124,11 +126,16 @@ export default function AutomationsView() {
 }
 
 function RuleSentence({ rule }: { rule: Pick<Automation, 'trigger' | 'conditions' | 'actions'> }) {
+  const project = useProjectContext();
+  const { data: states } = useWorkflow(project.id);
+  const stateName = (id?: string) => states?.find((s) => s.id === id)?.name ?? 'a state';
   const { data: users } = useUsers();
   const { data: labels } = useLabels();
   const t = rule.trigger;
   const describe = (a: Action) => {
     switch (a.type) {
+      case 'SET_STATE':
+        return `move to ${stateName(a.stateId)}`;
       case 'SET_STATUS':
         return `set status to ${STATUS_LABEL[a.status as keyof typeof STATUS_LABEL] ?? a.status}`;
       case 'SET_PRIORITY':
@@ -152,7 +159,8 @@ function RuleSentence({ rule }: { rule: Pick<Automation, 'trigger' | 'conditions
       {t.to && (
         <>
           {' '}
-          to <b>{STATUS_LABEL[t.to as keyof typeof STATUS_LABEL] ?? PRIORITY_LABEL[t.to as keyof typeof PRIORITY_LABEL] ?? t.to}</b>
+          {t.event === 'STATE_CHANGED' ? 'called' : 'to'}{' '}
+          <b>{t.event === 'STATE_CHANGED' ? stateName(t.to) : (STATUS_LABEL[t.to as keyof typeof STATUS_LABEL] ?? PRIORITY_LABEL[t.to as keyof typeof PRIORITY_LABEL] ?? t.to)}</b>
         </>
       )}
       {(rule.conditions?.type || rule.conditions?.priority || rule.conditions?.labelId) && (
@@ -169,6 +177,8 @@ function RuleSentence({ rule }: { rule: Pick<Automation, 'trigger' | 'conditions
 }
 
 function RuleBuilder({ onCancel, onSave }: { onCancel: () => void; onSave: (r: { name: string; trigger: Automation['trigger']; conditions: Automation['conditions']; actions: Action[] }) => void }) {
+  const project = useProjectContext();
+  const { data: states } = useWorkflow(project.id);
   const { data: users } = useUsers();
   const { data: labels } = useLabels();
   const [name, setName] = useState('');
@@ -177,6 +187,7 @@ function RuleBuilder({ onCancel, onSave }: { onCancel: () => void; onSave: (r: {
   const [actions, setActions] = useState<Action[]>([{ type: 'ADD_COMMENT', body: 'Nice work on {task.key}!' }]);
   const setAction = (i: number, a: Action) => setActions(actions.map((x, j) => (j === i ? a : x)));
   const defaults: Record<string, Action> = {
+    SET_STATE: { type: 'SET_STATE', stateId: states?.[0]?.id },
     SET_STATUS: { type: 'SET_STATUS', status: 'IN_PROGRESS' },
     SET_PRIORITY: { type: 'SET_PRIORITY', priority: 'HIGH' },
     ASSIGN: { type: 'ASSIGN', userId: users?.[0]?.id },
@@ -203,6 +214,16 @@ function RuleBuilder({ onCancel, onSave }: { onCancel: () => void; onSave: (r: {
             {TASK_STATUSES.map((s) => (
               <option key={s} value={s}>
                 to {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        )}
+        {trigger.event === 'STATE_CHANGED' && (
+          <select value={trigger.to ?? ''} onChange={(e) => setTrigger({ ...trigger, to: e.target.value || undefined })} aria-label="Target state">
+            <option value="">any state</option>
+            {states?.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.name}
               </option>
             ))}
           </select>
@@ -255,6 +276,11 @@ function RuleBuilder({ onCancel, onSave }: { onCancel: () => void; onSave: (r: {
               </option>
             ))}
           </select>
+          {a.type === 'SET_STATE' && (
+            <select value={a.stateId ?? ''} onChange={(e) => setAction(i, { ...a, stateId: e.target.value })} aria-label="State">
+              {states?.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+            </select>
+          )}
           {a.type === 'SET_STATUS' && (
             <select value={a.status} onChange={(e) => setAction(i, { ...a, status: e.target.value })} aria-label="Status">
               {TASK_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}

@@ -5,9 +5,10 @@ import { Dialog, Spinner } from '@/components/ui';
 import { toast } from '@/components/ui/toast';
 import { useProjects, useUsers } from '@/features/projects/api';
 import { errorMessage } from '@/services/api/client';
-import { TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES, TaskPriority, TaskStatus, TaskType } from '@/types';
-import { PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL } from '@/utils/format';
-import { useCreateTask, useLabels, useTasks } from './api';
+import { TASK_PRIORITIES, TASK_TYPES, TaskPriority, TaskType } from '@/types';
+import { recurrencePresets } from '@/utils/recurrence';
+import { PRIORITY_LABEL, TYPE_LABEL } from '@/utils/format';
+import { useCreateTask, useLabels, useTasks, useWorkflow } from './api';
 import { Picker } from '@/components/ui/Picker';
 import { LabelChip } from '@/components/ui';
 import { useOpenTask } from './useOpenTask';
@@ -20,14 +21,19 @@ export function CreateTaskDialog() {
   const create = useCreateTask();
   const openTask = useOpenTask();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ projectId: '', title: '', type: 'TASK' as TaskType, status: 'TODO' as TaskStatus, priority: 'MEDIUM' as TaskPriority, assigneeId: '', dueDate: '', description: '', parentId: '', labelIds: [] as string[] });
+  const [form, setForm] = useState({ projectId: '', title: '', type: 'TASK' as TaskType, stateId: '', repeat: 'none', priority: 'MEDIUM' as TaskPriority, assigneeId: '', dueDate: '', description: '', parentId: '', labelIds: [] as string[] });
   const { data: labels } = useLabels();
+  const { data: states } = useWorkflow(form.projectId || undefined);
+  useEffect(() => {
+    // A state picked for another project would be rejected: reset it when the project changes.
+    if (form.stateId && states && !states.some((st) => st.id === form.stateId)) setForm((f) => ({ ...f, stateId: '' }));
+  }, [states, form.stateId]);
   const { data: epics } = useTasks({ projectId: form.projectId, type: 'EPIC', size: 100 }, !!form.projectId && !!intent);
 
   useEffect(() => {
     if (!intent) return;
     const project = projects?.find((p) => p.key === intent.projectId?.toUpperCase() || p.id === intent.projectId) ?? projects?.find((p) => p.status === 'ACTIVE');
-    setForm((f) => ({ ...f, projectId: project?.id ?? '', title: '', description: '', status: intent.status ?? 'TODO', dueDate: '', assigneeId: '', parentId: '', labelIds: [] }));
+    setForm((f) => ({ ...f, projectId: project?.id ?? '', title: '', description: '', stateId: intent.stateId ?? '', repeat: 'none', dueDate: '', assigneeId: '', parentId: '', labelIds: [] }));
     create.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent, projects]);
@@ -39,7 +45,9 @@ export function CreateTaskDialog() {
         projectId: form.projectId,
         title: form.title,
         type: form.type,
-        status: form.status,
+        stateId: form.stateId || undefined,
+        status: form.stateId ? undefined : intent?.status,
+        recurrence: recurrencePresets(form.dueDate || null).find((p) => p.id === form.repeat)?.rule ?? undefined,
         priority: form.priority,
         assigneeId: form.assigneeId || null,
         dueDate: form.dueDate || null,
@@ -103,10 +111,11 @@ export function CreateTaskDialog() {
             </label>
             <label>
               Status
-              <select value={form.status} onChange={set('status')}>
-                {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
+              <select value={form.stateId} onChange={set('stateId')}>
+                <option value="">{intent?.status ? 'Default for this column' : 'First “to do” state'}</option>
+                {states?.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name}
                   </option>
                 ))}
               </select>
@@ -164,6 +173,16 @@ export function CreateTaskDialog() {
               </Picker>
             </div>
           </div>
+          <label>
+            Repeat
+            <select value={form.repeat} onChange={set('repeat')}>
+              {recurrencePresets(form.dueDate || null).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Description
             <textarea rows={3} value={form.description} onChange={set('description')} />

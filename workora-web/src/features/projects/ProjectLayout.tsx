@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, FileText, GanttChart, Kanban, LayoutGrid, List, ListTodo, Map, Plus, Rocket, Star, Target, Zap } from 'lucide-react';
+import { BarChart3, CalendarDays, FileText, GanttChart, Kanban, LayoutGrid, List, ListTodo, Map, Plus, Rocket, Star, Target, Workflow, Zap } from 'lucide-react';
 import { Suspense } from 'react';
 import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import { PageSkeleton } from '@/app/layouts/AppShell';
@@ -23,6 +23,7 @@ const VIEWS = [
   ['docs', 'Docs', FileText],
   ['reports', 'Reports', BarChart3],
   ['automations', 'Automations', Zap],
+  ['workflow', 'Workflow', Workflow],
 ] as const;
 
 /** Project workspace: hero header + view switcher. Switching views is client-side routing only. */

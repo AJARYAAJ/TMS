@@ -13,6 +13,7 @@ import {
   Paperclip,
   Play,
   Plus,
+  Repeat,
   Square,
   Tag,
   Timer,
@@ -27,7 +28,8 @@ import { useCan, useSession } from '@/features/auth/session.store';
 import { useUsers } from '@/features/projects/api';
 import { useSprints } from '@/features/sprints/api';
 import { ApiError } from '@/services/api/client';
-import { Task, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES, TaskDetail } from '@/types';
+import { Recurrence, Task, TASK_PRIORITIES, TASK_TYPES, TaskDetail } from '@/types';
+import { describeRecurrence, recurrencePresets } from '@/utils/recurrence';
 import { formatBytes, formatDate, isOverdue, PRIORITY_LABEL, STATUS_LABEL, timeAgo, TYPE_LABEL } from '@/utils/format';
 import { renderMarkdown } from '@/utils/markdown';
 import {
@@ -50,6 +52,7 @@ import {
   useUpdateTask,
   useUploadAttachment,
   useWatch,
+  useWorkflow,
 } from './api';
 import { useOpenTask, useOpenTaskKey } from './useOpenTask';
 
@@ -246,6 +249,7 @@ function PropertyPills({ task, disabled, onSave }: { task: TaskDetail; disabled:
   const { data: users } = useUsers();
   const { data: sprints } = useSprints(task.projectId);
   const { data: labels } = useLabels();
+  const { data: states } = useWorkflow(task.projectId);
   const createLabel = useCreateLabel();
   const openSprints = sprints?.filter((s) => s.status !== 'COMPLETED') ?? [];
   const sprintName = sprints?.find((s) => s.id === task.sprintId)?.name;
@@ -253,9 +257,18 @@ function PropertyPills({ task, disabled, onSave }: { task: TaskDetail; disabled:
 
   return (
     <div className="pills" role="group" aria-label="Task properties">
-      <Picker label="Status" value={task.status} disabled={disabled} options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s], icon: <span className={`status-dot status-${s.toLowerCase()}`} /> }))} onChange={(v) => v && onSave({ status: v })}>
-        <span className={`prop prop-status status-${task.status.toLowerCase()}`}>
-          <span className="status-dot" /> {STATUS_LABEL[task.status]}
+      <Picker
+        label="Status"
+        value={task.stateId}
+        disabled={disabled}
+        options={(states ?? []).map((st) => ({ value: st.id, label: st.name, hint: STATUS_LABEL[st.category], icon: <span className="status-dot" style={{ ['--st' as any]: st.color }} /> }))}
+        onChange={(id) => {
+          const st = states?.find((x) => x.id === id);
+          if (st) onSave({ stateId: st.id }, { stateId: st.id, state: st, status: st.category });
+        }}
+      >
+        <span className={`prop prop-status status-${task.status.toLowerCase()}`} style={task.state ? { ['--st' as any]: task.state.color } : undefined}>
+          <span className="status-dot" /> {task.state?.name ?? STATUS_LABEL[task.status]}
         </span>
       </Picker>
 
@@ -344,9 +357,78 @@ function PropertyPills({ task, disabled, onSave }: { task: TaskDetail; disabled:
         <input type="date" disabled={disabled} value={task.startDate ?? ''} onChange={(e) => onSave({ startDate: e.target.value || null })} aria-label="Start date" />
       </label>
 
+      <RepeatPicker task={task} disabled={disabled} onSave={(recurrence) => onSave({ recurrence }, { recurrence })} />
+
       <NumberPill icon={<Gauge size={13} />} label="Story points" value={task.storyPoints} suffix="pts" disabled={disabled} onSave={(v) => onSave({ storyPoints: v })} />
       <NumberPill icon={<Timer size={13} />} label="Estimate (hours)" value={task.estimateMinutes === null ? null : +(task.estimateMinutes / 60).toFixed(2)} suffix="h est" disabled={disabled} step={0.25} onSave={(v) => onSave({ estimateMinutes: v === null ? null : Math.round(v * 60) })} />
     </div>
+  );
+}
+
+/** "Repeat" pill: presets plus a custom rule (every N days/weeks/months, weekdays, end date). */
+function RepeatPicker({ task, disabled, onSave }: { task: Task; disabled: boolean; onSave: (r: Recurrence | null) => void }) {
+  const presets = recurrencePresets(task.dueDate);
+  const current = presets.find((p) => JSON.stringify(p.rule) === JSON.stringify(task.recurrence))?.id ?? (task.recurrence ? 'custom' : 'none');
+  const [custom, setCustom] = useState<Recurrence>(task.recurrence ?? { freq: 'WEEKLY', interval: 1, byWeekday: [] });
+  useEffect(() => {
+    if (task.recurrence) setCustom(task.recurrence);
+  }, [task.recurrence]);
+  const toggleDay = (d: number) => {
+    const days = new Set(custom.byWeekday ?? []);
+    days.has(d) ? days.delete(d) : days.add(d);
+    setCustom({ ...custom, byWeekday: [...days].sort() });
+  };
+  return (
+    <Picker
+      label="Repeat"
+      value={current === 'custom' ? null : current}
+      disabled={disabled}
+      options={presets.map((p) => ({ value: p.id, label: p.label, icon: <Repeat size={13} /> }))}
+      onChange={(id) => onSave(presets.find((p) => p.id === id)?.rule ?? null)}
+      footer={(close) => (
+        <form
+          className="repeat-custom"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const rule: Recurrence = { freq: custom.freq, interval: Math.max(1, custom.interval ?? 1) };
+            if (custom.freq === 'WEEKLY' && custom.byWeekday?.length) rule.byWeekday = custom.byWeekday;
+            if (custom.endDate) rule.endDate = custom.endDate;
+            onSave(rule);
+            close();
+          }}
+        >
+          <span className="eyebrow">Custom</span>
+          <div className="repeat-row">
+            Every
+            <input type="number" min={1} max={365} value={custom.interval ?? 1} onChange={(e) => setCustom({ ...custom, interval: Number(e.target.value) })} aria-label="Repeat interval" />
+            <select value={custom.freq} onChange={(e) => setCustom({ ...custom, freq: e.target.value as Recurrence['freq'] })} aria-label="Repeat unit">
+              <option value="DAILY">day(s)</option>
+              <option value="WEEKLY">week(s)</option>
+              <option value="MONTHLY">month(s)</option>
+              <option value="YEARLY">year(s)</option>
+            </select>
+          </div>
+          {custom.freq === 'WEEKLY' && (
+            <div className="weekday-toggles" role="group" aria-label="Repeat on">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((l, d) => (
+                <button type="button" key={d} className={custom.byWeekday?.includes(d) ? 'on' : ''} onClick={() => toggleDay(d)} aria-pressed={!!custom.byWeekday?.includes(d)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          <label className="repeat-row">
+            Until
+            <input type="date" value={custom.endDate ?? ''} onChange={(e) => setCustom({ ...custom, endDate: e.target.value || null })} aria-label="Repeat until" />
+          </label>
+          <button className="btn btn-ink btn-sm btn-block">Apply</button>
+        </form>
+      )}
+    >
+      <span className={`prop${task.recurrence ? ' prop-on' : ''}`}>
+        <Repeat size={13} /> {task.recurrence ? describeRecurrence(task.recurrence) : 'Repeat'}
+      </span>
+    </Picker>
   );
 }
 

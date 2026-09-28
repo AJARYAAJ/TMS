@@ -42,12 +42,14 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 |------|---------|
 | **Tasks & issues** | Types (task, bug, story, epic), epics → tasks → subtasks with progress roll-up, labels, watchers, estimates, story points, start/due dates |
 | **Dependencies** | *blocks / blocked by / relates / duplicates*, cycle detection, blocked badges on cards |
-| **Views** | Overview, List (filters + multi-select bulk edit), Board (drag & drop), Backlog, Sprint, Calendar, Timeline, Roadmap, Goals, Docs, Reports, Automations |
+| **Views** | Overview, List (filters + multi-select bulk edit), Board (drag & drop), Backlog, Sprint, Calendar, Timeline, Roadmap, Goals, Docs, Reports, Automations, Workflow |
+| **Custom workflows** | Per-project states (e.g. *To do → In dev → Code review → QA → Done*) with colours, drag-to-reorder, WIP limits and delete-with-move; each state maps to a status category so reports, sprints and automations keep working |
+| **Recurring tasks** | Daily, weekdays, weekly on chosen days, every N weeks/months, yearly, with an optional end date; completing an occurrence creates the next one (dates shifted, labels/assignee/estimate kept) exactly once |
 | **Sprints** | Plan, start (one active per project), complete (unfinished work returns to the backlog) |
 | **Time tracking** | One live timer per user (shown in the command bar), manual logs (“1h 30m”), weekly timesheet, estimate vs. logged |
 | **Goals / OKRs** | Objectives with manual key results or ones computed from linked tasks; status and progress roll-up |
 | **Docs** | Markdown pages per project or workspace, autosave, version-conflict detection, task keys auto-link, full-text search |
-| **Automations** | *When → If → Then* rules (status/priority change, created, assigned, commented, overdue → set fields, assign, label, move sprint, comment, notify). Loop-safe |
+| **Automations** | *When → If → Then* rules (enters state, status/priority change, created, assigned, commented, overdue → move to state, set fields, assign, label, move sprint, comment, notify). Loop-safe |
 | **Integrations** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
 | **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live), Inbox page, email queue |
 | **Workspace** | Multi-tenant organizations, RBAC (Owner › Admin › Member › Viewer), teams, labels, favourites pinned to the dock |
@@ -73,8 +75,8 @@ completion heatmap, borderless floating surfaces on a dotted paper canvas, an el
 display type, property **pills** with popover pickers, and a floating task **sheet**. Light and dark themes; on phones
 the dock becomes a bottom tab bar.
 
-Not yet built: third-party app integrations beyond webhooks (Slack/GitHub apps), custom workflow statuses,
-recurring tasks, refresh tokens, SMTP transport (emails are logged).
+Not yet built: third-party app integrations beyond webhooks (Slack/GitHub apps), refresh tokens,
+SMTP transport (emails are logged).
 
 ## Testing
 
@@ -82,9 +84,11 @@ recurring tasks, refresh tokens, SMTP transport (emails are logged).
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-Two e2e suites (25 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+Three e2e suites (44 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
 ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
 epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
-prevention), signed webhook deliveries, bulk edit, favourites and overdue reminders.
+prevention), signed webhook deliveries, bulk edit, favourites, overdue reminders, custom workflows
+(CRUD, reorder, category re-sync, delete-with-move, state automations) and recurring tasks (rule maths,
+spawning once, end dates).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

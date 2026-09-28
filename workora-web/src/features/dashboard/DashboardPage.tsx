@@ -127,7 +127,7 @@ function FocusCard({ task }: { task: Task }) {
       </button>
       <div className="focus-meta">
         <span className="mono">{task.key}</span>
-        <StatusBadge status={task.status} />
+        <StatusBadge status={task.status} state={task.state} />
         <PriorityIcon priority={task.priority} withLabel />
         {task.dueDate && <span className={isOverdue(task.dueDate, task.status) ? 'text-danger' : ''}>Due {formatDate(task.dueDate)}</span>}
       </div>

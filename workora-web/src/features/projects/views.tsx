@@ -5,12 +5,12 @@ import { Avatar, EmptyState, PriorityIcon, ProgressBar, Skeleton, SkeletonRows, 
 import { useCan } from '@/features/auth/session.store';
 import { BoardView } from '@/features/boards/BoardView';
 import { useCreateSprint, useSprintAction, useSprints } from '@/features/sprints/api';
-import { TaskFilters, useBulkUpdate, useCreateTask, useLabels, useTasks, useUpdateTask } from '@/features/tasks/api';
+import { TaskFilters, useBulkUpdate, useCreateTask, useLabels, useTasks, useUpdateTask, useWorkflow } from '@/features/tasks/api';
 import { TaskRow } from '@/features/tasks/TaskRow';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
 import { errorMessage } from '@/services/api/client';
-import { Sprint, Task, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from '@/types';
-import { formatDate, isOverdue, PRIORITY_LABEL, STATUS_LABEL, timeAgo, todayIso, toIsoDate, TYPE_LABEL } from '@/utils/format';
+import { Sprint, Task, TASK_PRIORITIES, TASK_TYPES } from '@/types';
+import { formatDate, isOverdue, PRIORITY_LABEL, timeAgo, todayIso, toIsoDate, TYPE_LABEL } from '@/utils/format';
 import { useProjectActivity, useUsers } from './api';
 import { useProjectContext } from './ProjectLayout';
 
@@ -104,6 +104,7 @@ export function ListView() {
   const { data: users } = useUsers();
   const { data: labels } = useLabels();
   const { data: sprints } = useSprints(project.id);
+  const { data: states } = useWorkflow(project.id);
   const [filters, setFilters] = useState<TaskFilters>({ sort: 'position', order: 'asc' });
   const [page, setPage] = useState(1);
   const { data, isLoading, isFetching } = useTasks({ ...filters, projectId: project.id, page, size: 100 });
@@ -130,11 +131,11 @@ export function ListView() {
     <div className="page">
       <div className="toolbar filters">
         <input className="filter-input" placeholder="Filter by title or key…" value={filters.q ?? ''} onChange={set('q')} aria-label="Filter tasks" />
-        <select value={filters.status ?? ''} onChange={set('status')} aria-label="Status">
+        <select value={filters.stateId ?? ''} onChange={set('stateId')} aria-label="Status">
           <option value="">All statuses</option>
-          {TASK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABEL[s]}
+          {states?.map((st) => (
+            <option key={st.id} value={st.id}>
+              {st.name}
             </option>
           ))}
         </select>
@@ -226,11 +227,11 @@ export function ListView() {
       {selected.size > 0 && (
         <div className="bulk-bar" role="toolbar" aria-label="Bulk actions">
           <strong>{selected.size} selected</strong>
-          <select value="" onChange={(e) => e.target.value && apply({ status: e.target.value as any })} aria-label="Set status">
-            <option value="">Status…</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+          <select value="" onChange={(e) => e.target.value && apply({ stateId: e.target.value })} aria-label="Set status">
+            <option value="">Move to…</option>
+            {states?.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.name}
               </option>
             ))}
           </select>

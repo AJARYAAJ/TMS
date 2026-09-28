@@ -6,8 +6,8 @@ import { useProjectContext } from '@/features/projects/ProjectLayout';
 import { useProjects } from '@/features/projects/api';
 import { api } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
-import { TASK_PRIORITIES, TASK_STATUSES } from '@/types';
-import { formatDate, PRIORITY_LABEL, STATUS_LABEL } from '@/utils/format';
+import { TASK_PRIORITIES } from '@/types';
+import { formatDate, PRIORITY_LABEL } from '@/utils/format';
 
 interface ProjectReport {
   total: number;
@@ -18,6 +18,7 @@ interface ProjectReport {
   byPriority: Record<string, number>;
   workload: { id: string; name: string; total: number; open: number; openPoints: number }[];
   trend: { date: string; completed: number; created: number }[];
+  byState: { id: string; name: string; color: string; category: string; wipLimit: number | null; count: number }[];
   activeSprint: null | { name: string; startDate: string; endDate: string; total: number; done: number; points: number; donePoints: number };
 }
 
@@ -54,8 +55,11 @@ export default function ReportsView() {
 
       <div className="dashboard-grid">
         <section className="tile">
-          <h2>Tasks by status</h2>
-          <BarList rows={TASK_STATUSES.map((s) => ({ label: STATUS_LABEL[s], value: data.byStatus[s] ?? 0 }))} unit="tasks" />
+          <h2>Tasks by workflow state</h2>
+          <BarList
+            rows={(data.byState ?? []).map((st) => ({ label: st.name, value: st.count, note: st.wipLimit && st.count > st.wipLimit ? `over WIP ${st.wipLimit}` : undefined }))}
+            unit="tasks"
+          />
         </section>
         <section className="tile">
           <h2>Tasks by priority</h2>
