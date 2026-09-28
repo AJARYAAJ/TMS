@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workora-api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: workora
+          POSTGRES_PASSWORD: workora
+          POSTGRES_DB: workora_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U workora" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workora-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:e2e
+        env:
+          DATABASE_URL: postgres://workora:workora@localhost:5432/workora_test
+          REDIS_URL: redis://localhost:6379
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workora-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workora-web/package-lock.json
+      - run: npm ci
+      - run: npm run build

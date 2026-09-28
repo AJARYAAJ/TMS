@@ -1,0 +1,23 @@
+/** Central query-key factory for the server-state cache. */
+export const qk = {
+  me: ['me'] as const,
+  projects: ['projects'] as const,
+  project: (idOrKey: string) => ['project', idOrKey.toUpperCase()] as const,
+  board: (projectId: string) => ['board', projectId] as const,
+  tasks: (params: Record<string, unknown>) => ['tasks', params] as const,
+  allTasks: ['tasks'] as const,
+  task: (key: string) => ['task', key.toUpperCase()] as const,
+  comments: (taskKey: string) => ['comments', taskKey.toUpperCase()] as const,
+  attachments: (taskKey: string) => ['attachments', taskKey.toUpperCase()] as const,
+  taskActivity: (taskKey: string) => ['activity', 'task', taskKey.toUpperCase()] as const,
+  projectActivity: (projectId: string) => ['activity', 'project', projectId] as const,
+  orgActivity: ['activity', 'org'] as const,
+  sprints: (projectId: string) => ['sprints', projectId] as const,
+  reports: (projectId: string) => ['reports', projectId] as const,
+  dashboard: ['dashboard'] as const,
+  notifications: ['notifications'] as const,
+  members: ['members'] as const,
+  users: ['users'] as const,
+  teams: ['teams'] as const,
+  search: (q: string) => ['search', q] as const,
+};
