@@ -63,6 +63,11 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
       return { summary: `deleted doc “${d.document.title}”` };
     case 'GOAL_CREATED':
       return { summary: `created goal “${d.goal.title}”` };
+    case 'DEV_LINKED': {
+      const what = { pull_request: 'pull request', commit: 'commit', issue: 'issue', branch: 'branch' }[d.link.kind as string] ?? 'item';
+      if (!d.isNew && d.link.kind === 'pull_request') return { summary: `${what} ${d.link.title} is now ${d.link.state}`, taskId: d.task.id };
+      return d.isNew ? { summary: `linked ${what} ${d.link.title}`, taskId: d.task.id } : null;
+    }
     case 'WORKFLOW_UPDATED':
       return { summary: `updated the workflow (${d.states.map((st: { name: string }) => st.name).join(' → ')})` };
     case 'TASK_RECURRED':

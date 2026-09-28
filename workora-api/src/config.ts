@@ -16,6 +16,8 @@ export interface AppConfig {
   queuePrefix: string;
   /** Allow webhooks to private/loopback addresses (disable in production to prevent SSRF). */
   webhookAllowPrivate: boolean;
+  /** Public URL of the SPA, used for links in Slack messages and GitHub comments. */
+  appUrl: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -33,6 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 600),
     realtimeRedisAdapter: (env.REALTIME_REDIS_ADAPTER ?? 'true') !== 'false',
     queuePrefix: env.QUEUE_PREFIX ?? 'workora',
+    appUrl: (env.APP_URL ?? 'http://localhost:5173/workora').replace(/\/$/, ''),
     webhookAllowPrivate: (env.WEBHOOK_ALLOW_PRIVATE ?? (env.NODE_ENV === 'production' ? 'false' : 'true')) === 'true',
   };
 }

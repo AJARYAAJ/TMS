@@ -39,7 +39,8 @@ export async function loadTaskStats(m: EntityManager, ids: string[]): Promise<Ma
             (SELECT COUNT(*) FROM task_links l JOIN tasks s ON s.id = l.source_task_id
               WHERE l.target_task_id = t.id AND l.type = 'BLOCKS' AND s.status <> 'DONE')::int AS "blockedBy",
             (SELECT COALESCE(SUM(e.minutes), 0) FROM time_entries e WHERE e.task_id = t.id)::int AS "loggedMinutes",
-            (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id)::int AS "commentCount"
+            (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id)::int AS "commentCount",
+            (SELECT COUNT(*) FROM external_links x WHERE x.task_id = t.id AND x.kind = 'pull_request' AND x.state IN ('open', 'draft'))::int AS "openPrs"
        FROM tasks t WHERE t.id = ANY($1)`,
     [ids],
   );
@@ -189,8 +190,17 @@ export class TasksService {
   async get(orgId: string, idOrKey: string) {
     const m = this.dataSource.manager;
     const task = await findTask(m, orgId, idOrKey);
-    const [dto, watchers, links] = await Promise.all([taskDto(m, task), this.watchers(task.id), this.links(task.id)]);
-    return { ...dto, watchers, links };
+    const [dto, watchers, links, devLinks] = await Promise.all([
+      taskDto(m, task),
+      this.watchers(task.id),
+      this.links(task.id),
+      m.query(
+        `SELECT id, provider, kind, external_id AS "externalId", url, title, state, author, updated_at AS "updatedAt"
+           FROM external_links WHERE task_id = $1 ORDER BY CASE kind WHEN 'pull_request' THEN 0 WHEN 'issue' THEN 1 ELSE 2 END, updated_at DESC`,
+        [task.id],
+      ),
+    ]);
+    return { ...dto, watchers, links, devLinks };
   }
 
   async board(orgId: string, projectIdOrKey: string, sprintId?: string) {

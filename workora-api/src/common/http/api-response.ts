@@ -25,3 +25,8 @@ export class ApiResult<T> {
 export function paginated<T>(items: T[], page: number, size: number, total: number): ApiResult<T[]> {
   return new ApiResult(items, { page, size, total, totalPages: Math.ceil(total / size) });
 }
+
+/** Return this to send a body verbatim, without the API envelope (e.g. replies to Slack). */
+export class RawJson<T = unknown> {
+  constructor(readonly body: T) {}
+}

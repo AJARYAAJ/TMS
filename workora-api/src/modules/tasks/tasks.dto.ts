@@ -110,8 +110,9 @@ export interface TaskStats {
   blockedBy: number;
   loggedMinutes: number;
   commentCount: number;
+  openPrs: number;
 }
-export const EMPTY_STATS: TaskStats = { subtaskCount: 0, subtaskDone: 0, blockedBy: 0, loggedMinutes: 0, commentCount: 0 };
+export const EMPTY_STATS: TaskStats = { subtaskCount: 0, subtaskDone: 0, blockedBy: 0, loggedMinutes: 0, commentCount: 0, openPrs: 0 };
 
 export function toTaskDto(t: Task, stats: TaskStats = EMPTY_STATS) {
   return {
