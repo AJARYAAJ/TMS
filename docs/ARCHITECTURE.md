@@ -1,0 +1,214 @@
+# Workora architecture
+
+```
+                 ┌──────────────────────────────────────┐
+                 │            WORKORA SPA               │
+                 │ React Router · TanStack Query cache  │
+                 │ Zustand (UI + session) · socket.io   │
+                 └───────────────┬──────────────────────┘
+                     HTTPS REST  │  WebSocket (/api/v1/realtime)
+                                 ▼
+                 ┌──────────────────────────────────────┐
+                 │          API (NestJS, /api/v1)       │
+                 │ JwtAuthGuard → UserThrottlerGuard →  │
+                 │ RolesGuard → ValidationPipe →        │
+                 │ controller → service (transaction)   │
+                 │ ResponseEnvelopeInterceptor /        │
+                 │ ApiExceptionFilter                   │
+                 └───────────────┬──────────────────────┘
+                                 │ after commit
+                                 ▼
+                        EventBus (DomainEvent)
+          ┌──────────────┬───────┴────────┬───────────────┐
+          ▼              ▼                ▼               ▼
+   ActivityListener  NotificationListener RealtimeRelay  JobScheduler
+   (audit log)       (in-app + email job) (socket rooms)  (BullMQ)
+          │              │                │               │
+          ▼              ▼                ▼               ▼
+      PostgreSQL     PostgreSQL       Redis adapter     Redis queue → JobsProcessor
+```
+
+## Backend (`workora-api/`)
+
+A **modular monolith**: each folder under `src/modules` owns its entity, API and event
+subscribers. Modules talk to each other through the event bus rather than calling each other.
+
+| Module | Responsibility |
+|--------|----------------|
+| `auth` | register, login, `me`, switch organization (issues JWTs) |
+| `organizations` | tenants, memberships, roles |
+| `users`, `teams` | people directory, teams |
+| `projects` | projects (key such as `ECOM`), board endpoint |
+| `tasks` | tasks & issues (`type`), filtering, PATCH semantics, drag & drop ordering |
+| `sprints` | plan / start / complete (unfinished work returns to backlog) |
+| `comments` | comments with `@mentions` |
+| `attachments`, `storage` | signed-URL uploads and downloads |
+| `activity` | append-only audit log built from domain events |
+| `notifications` | who-should-know rules, in-app inbox, email jobs |
+| `realtime` | socket.io gateway + relay of domain events to rooms |
+| `jobs` | BullMQ queue + worker (project setup, email) |
+| `search` | PostgreSQL full-text search across tasks, projects, people, comments |
+| `reports` | dashboard (incl. completion heatmap) and project analytics |
+| `labels` | organization-wide labels |
+| `time` | timers and time entries, timesheets |
+| `goals` | goals/OKRs with key results and linked tasks |
+| `documents` | markdown docs with compare-and-swap versioning |
+| `automations` | rule engine subscribed to the event bus |
+| `integrations` | outgoing webhooks (own BullMQ queue, HMAC signatures, delivery log); Slack and GitHub integrations |
+| `favorites`, `roadmap` | starred projects; epics across projects on a time axis |
+| `workflow` | per-project workflow states (board columns) mapped to status categories |
+| `recurrence` | recurring-task rules and next-occurrence creation |
+
+### Request pipeline
+
+1. **`JwtAuthGuard`** verifies the bearer token and loads the *current* membership, so revoking a
+   member or changing a role takes effect immediately. It sets `req.user = { userId, organizationId, role }`.
+2. **`UserThrottlerGuard`** applies fixed-window rate limits in Redis, keyed per user (or IP when
+   anonymous), shared across instances.
+3. **`RolesGuard`** enforces `@MinRole(Role.MEMBER)` and similar, using the hierarchy OWNER › ADMIN › MEMBER › VIEWER.
+4. **`ValidationPipe`** (class-validator) whitelists input; failures become `VALIDATION_ERROR`
+   with per-field `details`.
+5. Services run their writes in a transaction and publish a `DomainEvent` **after it commits**.
+6. **`ResponseEnvelopeInterceptor`** wraps results as `{ success: true, data, meta }`.
+   **`ApiExceptionFilter`** turns every error into `{ success: false, error: { code, message } }`.
+
+### Multi-tenancy
+
+Every tenant-owned row carries `organization_id`, and every query filters on the caller's
+organization. A lookup by id or key in another tenant returns 404, never 403, so the API does not
+reveal that the resource exists. A user can belong to several organizations and switches between
+them with `POST /auth/switch-organization`.
+
+### Workflows
+
+Each project owns an ordered list of `workflow_states` (name, colour, WIP limit) and every state
+belongs to one of four **status categories**: `TODO`, `IN_PROGRESS`, `IN_REVIEW` or `DONE`. A task
+points at a state (`state_id`), and `tasks.status` always mirrors that state's category. Board
+columns are states. Reports, sprint completion, "done" timestamps, overdue checks and `STATUS_CHANGED`
+automations all reason about categories, so teams can rename, add and reorder states without breaking
+anything. Changing a state's category re-syncs its tasks. Deleting a state requires a `moveTo` target
+when it still has tasks. Automations can also trigger on `STATE_CHANGED` and run `SET_STATE`.
+
+### Recurring tasks
+
+`tasks.recurrence` holds a rule (`freq` DAILY/WEEKLY/MONTHLY/YEARLY, `interval`, `byWeekday`,
+`endDate`). `RecurrenceService` subscribes to `TASK_UPDATED`. When an occurrence enters a done-category
+state (via drag, bulk edit, automation or API), it atomically claims `recurrence_spawned_at` and creates
+the next occurrence. Dates are advanced by the rule and never land in the past. Assignee, labels, estimate,
+epic and an open sprint carry over, and every occurrence shares a `series_id`. Rule maths lives in a pure
+module (`recurrence.ts`) with its own unit tests.
+
+### Slack & GitHub
+
+Both live in `modules/integrations` and are stored as `integrations` rows (`provider`, `config` jsonb, a
+`secret` column that is never selected by default, health fields `last_status/last_error/last_activity_at`).
+Inbound hooks are public routes under `/api/v1/hooks`, where the raw request body is kept so signatures can
+be checked byte-for-byte.
+
+- **Slack out:** `SlackService` subscribes to the event bus, filters by the integration's events and project,
+  and enqueues `slack.post` jobs on the `workora-integrations` BullMQ queue. The processor POSTs Block Kit
+  messages (user text is escaped) to the Incoming Webhook and records health.
+- **Slack in:** `POST /hooks/slack/:id/commands` verifies `v0` signatures (HMAC-SHA256 of
+  `v0:timestamp:body`, 5-minute replay window) and answers with an ephemeral response. `create` runs through
+  `TasksService` as the integration's author, so it is validated, audited and broadcast like any other change.
+- **GitHub in:** `POST /hooks/github/:id` verifies `X-Hub-Signature-256` and handles `pull_request`, `push` and
+  `issues`. Task keys are extracted from titles, bodies, branch names and commit messages. Links are upserted into
+  `external_links` (unique per task and external id, so redeliveries are harmless) and publish `DEV_LINKED`.
+  PR opened or merged moves the task to the configured state or category, but **only forward** by category
+  rank. `fixes/closes/resolves KEY` on the default branch and closed linked issues complete tasks. New issues
+  can create tasks (a `bug` label makes them bugs). Changes are attributed to e.g. "octocat via GitHub".
+
+### Board ordering
+
+Each task has a dense, zero-based `position` within its `(project, workflow state)` column.
+`PATCH /tasks/:id/status { status, position }` locks the project row (`SELECT … FOR UPDATE`),
+removes the task from its old column, inserts it at `position` in the new one, and rewrites both
+columns' positions. That serializes concurrent drags within a project.
+
+### Events
+
+`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_DELETED`, `TASK_LINKED`, `TASK_OVERDUE`,
+`COMMENT_CREATED`, `ATTACHMENT_ADDED`, `ATTACHMENT_DELETED`, `TIME_LOGGED`, `PROJECT_CREATED`, `PROJECT_UPDATED`,
+`SPRINT_CREATED`, `SPRINT_UPDATED`, `SPRINT_STARTED`, `SPRINT_COMPLETED`, `DOCUMENT_CREATED`, `DOCUMENT_UPDATED`,
+`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`, `DEV_LINKED`.
+
+### Automations
+
+`AutomationsService` subscribes to the event bus. For each event it maps the event to triggers
+(`STATUS_CHANGED{from,to}`, `PRIORITY_CHANGED`, `TASK_CREATED`, `ASSIGNED`, `COMMENT_ADDED`,
+`TASK_OVERDUE`), loads the project's enabled rules, checks conditions (type, priority, label) and runs
+the actions **through the normal services** as the rule's author. Because those changes flow through the
+same services, they are validated, audited, broadcast and delivered to webhooks like any other change.
+The acting principal carries `automation: <ruleId>`. Events from rule-made changes carry
+`actor.automation` and are ignored by the engine, so rules can never trigger each other in a loop.
+
+### Recurring jobs
+
+`JobScheduler` registers a BullMQ job scheduler (`tasks.overdue-scan`, every 15 min). It marks newly overdue
+tasks (`overdue_notified_at`) and publishes `TASK_OVERDUE` once per task. The marker resets when the due date changes.
+
+```ts
+interface DomainEvent<T> {
+  id: string; type: DomainEventType; organizationId: string; projectId?: string;
+  actor: { id: string; name: string } | null; occurredAt: string; data: T;
+}
+```
+
+Adding a subsystem (automation rules, analytics, webhooks…) means adding one more
+`@OnEvent(DOMAIN_EVENT)` subscriber. No existing service changes.
+
+### Realtime protocol
+
+- Connect with `io({ path: '/api/v1/realtime', auth: { token } })`. Invalid tokens are disconnected.
+- On connect the socket joins `org:<id>` and `user:<id>` and receives `ready`.
+- `emit('subscribe', { projectId })` joins `project:<id>` after checking the project is in the tenant; the ack is `{ ok }`.
+- The server emits `event` with `{ id, type, projectId, actor, occurredAt, data }`. Task events also go to
+  the assignee's user room, which keeps "My Work" live. `NOTIFICATION_CREATED` goes to the recipient only.
+- `@socket.io/redis-adapter` fans broadcasts out across API instances.
+
+### Files
+
+1. `POST /tasks/:id/attachments/upload-url` returns `{ uploadUrl, storageKey }` (HMAC-signed, 15 min TTL).
+2. The browser `PUT`s the bytes to `uploadUrl`.
+3. `POST /tasks/:id/attachments { storageKey, fileName }` records the attachment, which emits `ATTACHMENT_ADDED`.
+
+The bundled driver writes to local disk. An S3 driver only needs `StorageService.signedUrl`
+to return presigned URLs.
+
+## Frontend (`workora-web/`)
+
+```
+src/
+  app/          router (lazy routes), providers (QueryClient), layouts (AppShell), ui.store
+  features/     auth, dashboard, my-work, projects, tasks, boards, sprints, reports,
+                notifications, search, command-palette, administration, teams, placeholders
+  components/ui primitives: Avatar, badges, Skeleton, Dialog, toasts, …
+  services/     api client (envelope → data | ApiError), query keys, realtime client
+  hooks/ utils/ types/ config/
+```
+
+State is kept in three separate places:
+
+| Kind | Where | Examples |
+|------|-------|----------|
+| Server state | TanStack Query | projects, tasks, board, comments, notifications |
+| UI state | `useUiStore` (Zustand) | sidebar, theme, palette open, create dialogs |
+| Session | `useSessionStore` (Zustand, persisted) | token, user, organization, role |
+| URL state | React Router | current view, `?task=` (drawer), filters |
+
+- **Caching:** `staleTime` is 30 s and `gcTime` 10 min. Cached data renders immediately and is
+  revalidated in the background. The task drawer uses any cached board/list copy as placeholder data.
+- **Optimistic UI:** drags update the board cache during the drag. Field edits, comments and deletes
+  patch every cached copy. On failure the pre-mutation snapshot is restored and a toast explains why.
+- **Realtime:** `services/websocket/realtime.ts` applies events straight to the query cache. On
+  reconnect it invalidates all queries to catch up on anything missed.
+- **Lazy loading:** only the app shell, auth and dashboard are in the entry chunk. Project views,
+  reports, admin, teams and placeholders load on first use.
+
+## Scaling path
+
+- **Search:** move from Postgres FTS to OpenSearch behind the same `/search` contract.
+- **Workers:** run BullMQ processors in a separate process (`JobsModule` only) for heavy jobs.
+- **Read models:** have `ReportsModule` read from event-fed aggregates once live queries get expensive.
+- **Extraction:** the event bus boundary is where a module would split into its own service
+  (for example, notifications).
