@@ -14,7 +14,7 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, CheckSquare, Clock, MessageSquare, Plus, Repeat } from 'lucide-react';
+import { AlertOctagon, CheckSquare, Clock, GitPullRequest, MessageSquare, Plus, Repeat } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUiStore } from '@/app/ui.store';
 import { Avatar, formatMinutes, LabelChip, PriorityIcon, Skeleton, TypeIcon } from '@/components/ui';
@@ -218,6 +218,11 @@ function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
         {task.subtaskCount > 0 && (
           <span title="Subtasks done">
             <CheckSquare size={12} /> {task.subtaskDone}/{task.subtaskCount}
+          </span>
+        )}
+        {task.openPrs > 0 && (
+          <span className="meta-pr" title={`${task.openPrs} open pull request(s)`}>
+            <GitPullRequest size={12} /> {task.openPrs}
           </span>
         )}
         {task.commentCount > 0 && (

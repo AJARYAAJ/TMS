@@ -75,6 +75,7 @@ export interface Task {
   blockedBy: number;
   loggedMinutes: number;
   commentCount: number;
+  openPrs: number;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -88,9 +89,36 @@ export interface TaskLinkItem {
   task: { id: string; key: string; title: string; status: TaskStatus; projectId: string };
 }
 
+export interface DevLink {
+  id: string;
+  provider: 'github';
+  kind: 'pull_request' | 'commit' | 'issue' | 'branch';
+  externalId: string;
+  url: string;
+  title: string;
+  state: 'open' | 'closed' | 'merged' | 'draft' | null;
+  author: string | null;
+  updatedAt: string;
+}
+
 export interface TaskDetail extends Task {
   watchers?: UserSummary[];
   links?: TaskLinkItem[];
+  devLinks?: DevLink[];
+}
+
+export interface Integration {
+  id: string;
+  provider: 'slack' | 'github';
+  name: string;
+  enabled: boolean;
+  config: Record<string, any>;
+  hookPath: string;
+  secret?: string;
+  slashCommandEnabled?: boolean;
+  lastStatus: string | null;
+  lastError: string | null;
+  lastActivityAt: string | null;
 }
 
 export interface Label {

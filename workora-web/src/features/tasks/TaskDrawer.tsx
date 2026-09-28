@@ -3,7 +3,14 @@ import {
   Calendar,
   ChevronRight,
   Clock,
+  Copy,
   Download,
+  GitCommitHorizontal,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  CircleDot,
   Eye,
   EyeOff,
   Flag,
@@ -175,6 +182,7 @@ function TaskDetails({ taskKey, onClose }: { taskKey: string; onClose: () => voi
 
       <Subtasks task={task} canEdit={canEdit} />
       <Dependencies task={task} canEdit={canEdit} />
+      <Development task={task} />
       <TimeSection task={task} canEdit={canEdit} />
       <Attachments taskKey={task.key} canEdit={canEdit} />
       <Discussion taskKey={task.key} canEdit={canEdit} />
@@ -648,6 +656,69 @@ function Dependencies({ task, canEdit }: { task: TaskDetail; canEdit: boolean })
             Link
           </button>
         </form>
+      )}
+    </section>
+  );
+}
+
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+
+function DevIcon({ link }: { link: NonNullable<TaskDetail['devLinks']>[number] }) {
+  if (link.kind === 'commit') return <GitCommitHorizontal size={15} />;
+  if (link.kind === 'issue') return <CircleDot size={15} className={link.state === 'closed' ? 'dev-closed' : 'dev-open'} />;
+  if (link.state === 'merged') return <GitMerge size={15} className="dev-merged" />;
+  if (link.state === 'closed') return <GitPullRequestClosed size={15} className="dev-closed" />;
+  if (link.state === 'draft') return <GitPullRequestDraft size={15} className="dev-draft" />;
+  return <GitPullRequest size={15} className="dev-open" />;
+}
+
+/** Linked pull requests, commits and issues from GitHub, plus a ready-made branch name. */
+function Development({ task }: { task: TaskDetail }) {
+  const links = task.devLinks ?? [];
+  const branch = `${task.key.toLowerCase()}-${slug(task.title)}`;
+  const copy = (text: string, what: string) => navigator.clipboard?.writeText(text).then(() => toast.success(`${what} copied`));
+  return (
+    <section className="sheet-section">
+      <div className="section-title">
+        <h3>
+          <GitBranch size={14} /> Development {links.length > 0 && <span className="count">{links.length}</span>}
+        </h3>
+        <span className="dev-actions">
+          <button className="btn btn-soft btn-sm" onClick={() => copy(branch, 'Branch name')} title={branch}>
+            <Copy size={12} /> Branch name
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => copy(`${task.key} ${task.title}`, 'Commit message')}>
+            <Copy size={12} /> Commit msg
+          </button>
+        </span>
+      </div>
+      {links.length ? (
+        <ul className="dev-links">
+          {links.map((l) => (
+            <li key={l.id}>
+              <DevIcon link={l} />
+              <a href={l.url} target="_blank" rel="noopener noreferrer" className="ellipsis">
+                {l.title}
+              </a>
+              {l.state && l.kind !== 'commit' && <span className={`dev-state ds-${l.state}`}>{l.state}</span>}
+              <span className="muted small">
+                {l.author && `@${l.author} · `}
+                {timeAgo(l.updatedAt)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted small">
+          Mention <code>{task.key}</code> in a branch, commit or pull request on a connected GitHub repo to link it here.
+        </p>
       )}
     </section>
   );

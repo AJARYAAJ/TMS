@@ -54,7 +54,7 @@ subscribers. Modules talk to each other through the event bus rather than callin
 | `goals` | goals/OKRs with key results and linked tasks |
 | `documents` | markdown docs with compare-and-swap versioning |
 | `automations` | rule engine subscribed to the event bus |
-| `integrations` | outgoing webhooks (own BullMQ queue, HMAC signatures, delivery log) |
+| `integrations` | outgoing webhooks (own BullMQ queue, HMAC signatures, delivery log); Slack and GitHub integrations |
 | `favorites`, `roadmap` | starred projects; epics across projects on a time axis |
 | `workflow` | per-project workflow states (board columns) mapped to status categories |
 | `recurrence` | recurring-task rules and next-occurrence creation |
@@ -98,6 +98,26 @@ the next occurrence. Dates are advanced by the rule and never land in the past. 
 epic and an open sprint carry over, and every occurrence shares a `series_id`. Rule maths lives in a pure
 module (`recurrence.ts`) with its own unit tests.
 
+### Slack & GitHub
+
+Both live in `modules/integrations` and are stored as `integrations` rows (`provider`, `config` jsonb, a
+`secret` column that is never selected by default, health fields `last_status/last_error/last_activity_at`).
+Inbound hooks are public routes under `/api/v1/hooks`, where the raw request body is kept so signatures can
+be checked byte-for-byte.
+
+- **Slack out:** `SlackService` subscribes to the event bus, filters by the integration's events and project,
+  and enqueues `slack.post` jobs on the `workora-integrations` BullMQ queue. The processor POSTs Block Kit
+  messages (user text is escaped) to the Incoming Webhook and records health.
+- **Slack in:** `POST /hooks/slack/:id/commands` verifies `v0` signatures (HMAC-SHA256 of
+  `v0:timestamp:body`, 5-minute replay window) and answers with an ephemeral response. `create` runs through
+  `TasksService` as the integration's author, so it is validated, audited and broadcast like any other change.
+- **GitHub in:** `POST /hooks/github/:id` verifies `X-Hub-Signature-256` and handles `pull_request`, `push` and
+  `issues`. Task keys are extracted from titles, bodies, branch names and commit messages. Links are upserted into
+  `external_links` (unique per task and external id, so redeliveries are harmless) and publish `DEV_LINKED`.
+  PR opened or merged moves the task to the configured state or category, but **only forward** by category
+  rank. `fixes/closes/resolves KEY` on the default branch and closed linked issues complete tasks. New issues
+  can create tasks (a `bug` label makes them bugs). Changes are attributed to e.g. "octocat via GitHub".
+
 ### Board ordering
 
 Each task has a dense, zero-based `position` within its `(project, workflow state)` column.
@@ -110,7 +130,7 @@ columns' positions. That serializes concurrent drags within a project.
 `TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_DELETED`, `TASK_LINKED`, `TASK_OVERDUE`,
 `COMMENT_CREATED`, `ATTACHMENT_ADDED`, `ATTACHMENT_DELETED`, `TIME_LOGGED`, `PROJECT_CREATED`, `PROJECT_UPDATED`,
 `SPRINT_CREATED`, `SPRINT_UPDATED`, `SPRINT_STARTED`, `SPRINT_COMPLETED`, `DOCUMENT_CREATED`, `DOCUMENT_UPDATED`,
-`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`.
+`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`, `DEV_LINKED`.
 
 ### Automations
 

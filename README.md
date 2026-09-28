@@ -50,7 +50,9 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 | **Goals / OKRs** | Objectives with manual key results or ones computed from linked tasks; status and progress roll-up |
 | **Docs** | Markdown pages per project or workspace, autosave, version-conflict detection, task keys auto-link, full-text search |
 | **Automations** | *When → If → Then* rules (enters state, status/priority change, created, assigned, commented, overdue → move to state, set fields, assign, label, move sprint, comment, notify). Loop-safe |
-| **Integrations** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
+| **Slack** | Channel notifications through an Incoming Webhook (Block Kit messages; pick events and an optional project) and a signed `/workora` slash command: `create [KEY:] title`, look up `ECOM-12`, search, help |
+| **GitHub** | Repository webhook (HMAC-verified) links PRs, commits, branches and issues that mention a task key; PR opened/merged moves the task forward through the workflow, `fixes ECOM-12` on the default branch closes it, new issues can become tasks. Task sheets show a *Development* panel with copyable branch names; cards show open-PR badges |
+| **Webhooks** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
 | **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live), Inbox page, email queue |
 | **Workspace** | Multi-tenant organizations, RBAC (Owner › Admin › Member › Viewer), teams, labels, favourites pinned to the dock |
 
@@ -75,7 +77,21 @@ completion heatmap, borderless floating surfaces on a dotted paper canvas, an el
 display type, property **pills** with popover pickers, and a floating task **sheet**. Light and dark themes; on phones
 the dock becomes a bottom tab bar.
 
-Not yet built: third-party app integrations beyond webhooks (Slack/GitHub apps), refresh tokens,
+### Connecting Slack and GitHub
+
+Admins manage both under **Admin → Integrations**.
+
+- **Slack:** create a Slack app, add an *Incoming Webhook* for a channel and paste its URL. For the slash
+  command, add `/workora`, paste the app's *Signing Secret*, and set the command's Request URL to the one
+  Workora shows (`/api/v1/hooks/slack/:id/commands`). Only `https://hooks.slack.com/` URLs are accepted.
+- **GitHub:** connect a repository (or any repository) to get a *Payload URL* (`/api/v1/hooks/github/:id`)
+  and a secret, shown once. Add them under the repo's *Settings → Webhooks* with content type
+  `application/json` and the *Pull requests*, *Pushes* and *Issues* events. Workora must be reachable from
+  GitHub/Slack (set `APP_URL` so links in Slack messages point at your deployment).
+
+The demo seed connects `acme/storefront` with an open PR and commits linked to ECOM-3.
+
+Not yet built: OAuth "Add to Slack"/GitHub App installs (setup uses webhooks and secrets), refresh tokens,
 SMTP transport (emails are logged).
 
 ## Testing
@@ -84,11 +100,12 @@ SMTP transport (emails are logged).
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-Three e2e suites (44 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+Four e2e suites (59 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
 ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
 epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
 prevention), signed webhook deliveries, bulk edit, favourites, overdue reminders, custom workflows
-(CRUD, reorder, category re-sync, delete-with-move, state automations) and recurring tasks (rule maths,
-spawning once, end dates).
+(CRUD, reorder, category re-sync, delete-with-move, state automations), recurring tasks (rule maths,
+spawning once, end dates) and Slack/GitHub (signatures and replay window, slash commands, event filtering,
+PR lifecycle with forward-only moves, closing keywords, issues → tasks, repository filter).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

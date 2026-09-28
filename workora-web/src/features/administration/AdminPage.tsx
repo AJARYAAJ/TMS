@@ -4,6 +4,7 @@ import { Avatar, SkeletonRows, Spinner } from '@/components/ui';
 import { useCan, useSession } from '@/features/auth/session.store';
 import { TeamsPanel } from '@/features/teams/TeamsPage';
 import { IntegrationsPanel, LabelsPanel } from './ExtraPanels';
+import { GithubCard, SlackCard } from './IntegrationCards';
 import { ApiError, errorMessage } from '@/services/api/client';
 import type { Role } from '@/types';
 import { formatDate } from '@/utils/format';
@@ -37,7 +38,15 @@ export default function AdminPage() {
           Integrations
         </button>
       </div>
-      {tab === 'members' ? <Members /> : tab === 'teams' ? <TeamsPanel /> : tab === 'labels' ? <LabelsPanel /> : <IntegrationsPanel />}
+      {tab === 'members' ? <Members /> : tab === 'teams' ? <TeamsPanel /> : tab === 'labels' ? (
+        <LabelsPanel />
+      ) : (
+        <div className="int-stack">
+          <SlackCard />
+          <GithubCard />
+          <IntegrationsPanel />
+        </div>
+      )}
     </div>
   );
 }

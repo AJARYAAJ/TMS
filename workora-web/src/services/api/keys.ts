@@ -32,4 +32,5 @@ export const qk = {
   webhooks: ['webhooks'] as const,
   roadmap: (projectId?: string) => ['roadmap', projectId ?? 'all'] as const,
   workflow: (projectId: string) => ['workflow', projectId] as const,
+  integrations: ['integrations'] as const,
 };

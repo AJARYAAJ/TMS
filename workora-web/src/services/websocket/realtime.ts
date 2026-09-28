@@ -114,6 +114,11 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
     case 'GOAL_UPDATED':
       qc.invalidateQueries({ queryKey: qk.goals });
       break;
+    case 'DEV_LINKED':
+      qc.invalidateQueries({ queryKey: qk.task(e.data.task.key) });
+      qc.invalidateQueries({ queryKey: qk.taskActivity(e.data.task.key) });
+      if (e.projectId) invalidateTaskViews(qc, e.projectId);
+      break;
     case 'WORKFLOW_UPDATED':
       if (e.projectId) {
         qc.setQueryData(qk.workflow(e.projectId), e.data.states);

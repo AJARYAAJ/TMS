@@ -21,6 +21,9 @@ import { Label } from '../modules/labels/label.entity';
 import { TaskLinkType } from '../modules/tasks/task-link.entity';
 import { TimeService } from '../modules/time/time.module';
 import { WorkflowService } from '../modules/workflow/workflow.module';
+import { GithubService } from '../modules/integrations/github.service';
+import { IntegrationsService } from '../modules/integrations/integrations.module';
+import { Integration } from '../modules/integrations/integration.entity';
 
 const PASSWORD = 'workora123';
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -222,6 +225,29 @@ async function main() {
   await tasks.create(R, { projectId: ecom.id, title: 'Weekly dependency updates', assigneeId: R.userId, dueDate: day(((8 - new Date().getDay()) % 7) || 7), recurrence: { freq: 'WEEKLY', byWeekday: [1] }, priority: TaskPriority.MEDIUM, labelIds: [lBackend.id] });
   await tasks.create(owner, { projectId: ecom.id, title: 'Reconcile payment provider invoices', assigneeId: owner.userId, dueDate: day(5), recurrence: { freq: 'MONTHLY' }, labelIds: [lPayments.id] });
   await tasks.create(P, { projectId: mobile.id, title: 'Triage crash reports', assigneeId: P.userId, dueDate: day(1), recurrence: { freq: 'WEEKLY', byWeekday: [1, 2, 3, 4, 5] } });
+
+  // ── GitHub: a connected repository with pull requests and commits linked to ECOM tasks
+  const gh = await app.get(IntegrationsService).createGithub(owner, { name: 'acme/storefront', repository: 'acme/storefront', projectId: ecom.id, createTasksFromIssues: true, onPrOpened: 'IN_REVIEW', onPrMerged: 'DONE', closeOnKeywords: true } as any);
+  const github = app.get(GithubService);
+  const integration = await db.getRepository(Integration).findOneByOrFail({ id: gh.id });
+  const repository = { full_name: 'acme/storefront', default_branch: 'main' };
+  const pr = (number: number, title: string, branch: string, login: string, extra: Record<string, unknown> = {}) => ({
+    action: 'opened',
+    repository,
+    sender: { login },
+    pull_request: { number, title, body: '', state: 'open', draft: false, merged: false, html_url: `https://github.com/acme/storefront/pull/${number}`, head: { ref: branch }, user: { login }, ...extra },
+  });
+  await github.handle(integration, 'push', {
+    ref: `refs/heads/${payment.toLowerCase()}-payment-intents`,
+    repository,
+    sender: { login: 'rahul-dev' },
+    commits: [
+      { id: 'a1b2c3d4e5f6a7b8c9d0', message: `${payment} create payment intents`, url: 'https://github.com/acme/storefront/commit/a1b2c3d', author: { username: 'rahul-dev' } },
+      { id: 'b2c3d4e5f6a7b8c9d0e1', message: `${payment} handle provider webhooks`, url: 'https://github.com/acme/storefront/commit/b2c3d4e', author: { username: 'rahul-dev' } },
+    ],
+  });
+  await github.handle(integration, 'pull_request', pr(42, `${payment}: payment intents + webhooks`, `${payment.toLowerCase()}-payment-intents`, 'rahul-dev'));
+  await github.handle(integration, 'pull_request', pr(45, 'Persist carts in Redis', `${created['Cart persistence across devices'].toLowerCase()}-cart-sync`, 'alex-w', { draft: true }));
 
   // ── History: finished work spread over the last ~10 weeks (feeds the Momentum heatmap)
   const chores = ['Crash reporting', 'Deep links', 'Onboarding copy', 'Dark mode polish', 'Icon set', 'Push opt-in', 'Analytics events', 'Splash screen', 'Settings screen', 'Accessibility audit', 'Image caching', 'Error states', 'Release notes', 'Beta invites'];
