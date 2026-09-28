@@ -21,7 +21,16 @@ export type DomainEventType =
   | 'SPRINT_UPDATED'
   | 'SPRINT_STARTED'
   | 'SPRINT_COMPLETED'
-  | 'USER_ADDED';
+  | 'USER_ADDED'
+  | 'TASK_OVERDUE'
+  | 'TASK_LINKED'
+  | 'TIME_LOGGED'
+  | 'DOCUMENT_CREATED'
+  | 'DOCUMENT_UPDATED'
+  | 'DOCUMENT_DELETED'
+  | 'GOAL_CREATED'
+  | 'GOAL_UPDATED'
+  | 'AUTOMATION_RAN';
 
 export interface FieldChange {
   from: unknown;

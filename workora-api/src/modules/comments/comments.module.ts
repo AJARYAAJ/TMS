@@ -116,5 +116,5 @@ export class CommentsController {
   }
 }
 
-@Module({ controllers: [CommentsController], providers: [CommentsService] })
+@Module({ controllers: [CommentsController], providers: [CommentsService], exports: [CommentsService] })
 export class CommentsModule {}

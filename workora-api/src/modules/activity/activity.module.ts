@@ -10,6 +10,7 @@ import { findTask } from '../tasks/tasks.service';
 import { Activity } from './activity.entity';
 
 const label = (s: unknown) => String(s ?? 'none').replace(/_/g, ' ').toLowerCase();
+const formatMinutes = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
 
 /** Turns a domain event into a human-readable activity entry (null = not worth logging). */
 export function describe(e: DomainEvent): { summary: string; taskId?: string } | null {
@@ -47,6 +48,20 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
       return { summary: `completed ${d.sprint.name}${d.movedToBacklog ? ` (${d.movedToBacklog} unfinished moved to backlog)` : ''}` };
     case 'USER_ADDED':
       return { summary: `added ${d.user.name} as ${label(d.role)}` };
+    case 'TASK_OVERDUE':
+      return { summary: `${d.task.key} became overdue`, taskId: d.task.id };
+    case 'TASK_LINKED':
+      return { summary: `linked ${d.link.source} ${label(d.link.type)} ${d.link.target}`, taskId: d.task.id };
+    case 'TIME_LOGGED':
+      return { summary: `logged ${formatMinutes(d.entry.minutes)} on ${d.task.key}`, taskId: d.task.id };
+    case 'DOCUMENT_CREATED':
+      return { summary: `created doc “${d.document.title}”` };
+    case 'DOCUMENT_DELETED':
+      return { summary: `deleted doc “${d.document.title}”` };
+    case 'GOAL_CREATED':
+      return { summary: `created goal “${d.goal.title}”` };
+    case 'AUTOMATION_RAN':
+      return d.actions.length ? { summary: `ran on ${d.task.key} (${d.actions.map((a: string) => label(a)).join(', ')})`, taskId: d.task.id } : null;
     default:
       return null;
   }

@@ -12,7 +12,9 @@ export class RealtimeRelay {
   relay(e: DomainEvent) {
     const targets = new Set<string>();
     if (e.projectId) targets.add(rooms.project(e.projectId));
-    if (e.type.startsWith('PROJECT_') || e.type === 'USER_ADDED') targets.add(rooms.org(e.organizationId));
+    const orgWide = e.type.startsWith('PROJECT_') || e.type.startsWith('GOAL_') || e.type === 'USER_ADDED';
+    const workspaceDoc = e.type.startsWith('DOCUMENT_') && !e.projectId;
+    if (orgWide || workspaceDoc) targets.add(rooms.org(e.organizationId));
     // Keep "My Work" live for the people a task belongs to, whatever project they have open.
     const task = e.data?.task;
     if (task?.assignee?.id) targets.add(rooms.user(task.assignee.id));

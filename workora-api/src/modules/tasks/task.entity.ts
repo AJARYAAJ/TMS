@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn, VersionColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn, VersionColumn } from 'typeorm';
+import { Label } from '../labels/label.entity';
 import { User } from '../users/user.entity';
 
 export enum TaskStatus {
@@ -47,10 +48,21 @@ export class Task {
   @Column({ type: 'date', nullable: true }) startDate: string | null;
   @Column({ type: 'date', nullable: true }) dueDate: string | null;
   @Column({ type: 'timestamptz', nullable: true }) completedAt: Date | null;
+  /** Epic or parent task (subtasks). */
+  @Column({ type: 'uuid', nullable: true }) parentId: string | null;
+  @Column({ type: 'int', nullable: true }) estimateMinutes: number | null;
+  @Column({ type: 'timestamptz', nullable: true, select: false }) overdueNotifiedAt: Date | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
   @VersionColumn() version: number;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' }) @JoinColumn({ name: 'assignee_id' }) assignee: User | null;
   @ManyToOne(() => User) @JoinColumn({ name: 'reporter_id' }) reporter: User;
+  @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' }) @JoinColumn({ name: 'parent_id' }) parent: Task | null;
+  @ManyToMany(() => Label)
+  @JoinTable({ name: 'task_labels', joinColumn: { name: 'task_id' }, inverseJoinColumn: { name: 'label_id' } })
+  labels: Label[];
+  @ManyToMany(() => User)
+  @JoinTable({ name: 'task_watchers', joinColumn: { name: 'task_id' }, inverseJoinColumn: { name: 'user_id' } })
+  watchers: User[];
 }

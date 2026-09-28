@@ -19,7 +19,7 @@ export class ProjectsController {
 
   @Get()
   list(@CurrentUser() u: AuthPrincipal, @Query('status') status?: ProjectStatus) {
-    return this.projects.list(u.organizationId, status);
+    return this.projects.list(u.organizationId, status, u.userId);
   }
 
   @MinRole(Role.MEMBER)
@@ -31,7 +31,7 @@ export class ProjectsController {
   /** Accepts either the project UUID or its key (e.g. ECOM). */
   @Get(':id')
   get(@CurrentUser() u: AuthPrincipal, @Param('id') id: string) {
-    return this.projects.get(u.organizationId, id);
+    return this.projects.get(u.organizationId, id, u.userId);
   }
 
   @MinRole(Role.ADMIN)

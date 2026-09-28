@@ -26,12 +26,12 @@ export class SearchController {
   async search(@CurrentUser() u: AuthPrincipal, @Query('q') raw = '', @Query('limit') limitRaw?: string) {
     const q = raw.trim().slice(0, 200);
     const limit = Math.min(Math.max(Number(limitRaw) || 5, 1), 25);
-    if (q.length < 2) return { query: q, tasks: [], projects: [], users: [], comments: [] };
+    if (q.length < 2) return { query: q, tasks: [], projects: [], users: [], comments: [], documents: [] };
     const ts = toPrefixTsQuery(q);
     const org = u.organizationId;
     const db = this.dataSource;
 
-    const [tasks, projects, users, comments] = await Promise.all([
+    const [tasks, projects, users, comments, documents] = await Promise.all([
       db.query(
         `SELECT t.id, t.key, t.title, t.status, t.priority, t.project_id AS "projectId", p.name AS "projectName"
            FROM tasks t JOIN projects p ON p.id = t.project_id
@@ -65,8 +65,17 @@ export class SearchController {
             [org, ts, limit],
           )
         : [],
+      db.query(
+        `SELECT d.id, d.title, d.icon, d.project_id AS "projectId", left(regexp_replace(d.content, '\s+', ' ', 'g'), 160) AS snippet
+           FROM documents d
+          WHERE d.organization_id = $1
+            AND (d.title ILIKE $2 OR ($3 <> '' AND to_tsvector('simple', d.title || ' ' || d.content) @@ to_tsquery('simple', $3)))
+          ORDER BY (d.title ILIKE $2) DESC, d.updated_at DESC
+          LIMIT $4`,
+        [org, like(q), ts, limit],
+      ),
     ]);
-    return { query: q, tasks, projects, users, comments };
+    return { query: q, tasks, projects, users, comments, documents };
   }
 }
 

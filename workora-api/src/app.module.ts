@@ -30,6 +30,14 @@ import { StorageModule } from './modules/storage/storage.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { UsersModule } from './modules/users/users.module';
+import { AutomationsModule } from './modules/automations/automations.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { GoalsModule } from './modules/goals/goals.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { LabelsModule } from './modules/labels/labels.module';
+import { RoadmapModule } from './modules/roadmap/roadmap.module';
+import { TimeModule } from './modules/time/time.module';
 
 @Module({
   imports: [
@@ -62,6 +70,14 @@ import { UsersModule } from './modules/users/users.module';
     NotificationsModule,
     SearchModule,
     ReportsModule,
+    LabelsModule,
+    TimeModule,
+    GoalsModule,
+    DocumentsModule,
+    AutomationsModule,
+    IntegrationsModule,
+    FavoritesModule,
+    RoadmapModule,
   ],
   providers: [
     // Order matters: authenticate first, then rate-limit per user, then check RBAC.

@@ -3,6 +3,7 @@ export const JOBS_QUEUE = 'workora-jobs';
 export const JobNames = {
   PROJECT_SETUP: 'project.setup',
   NOTIFICATION_EMAIL: 'notification.email',
+  OVERDUE_SCAN: 'tasks.overdue-scan',
 } as const;
 
 export interface ProjectSetupJob {

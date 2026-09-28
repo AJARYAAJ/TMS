@@ -14,6 +14,8 @@ export interface AppConfig {
   rateLimitPerMinute: number;
   realtimeRedisAdapter: boolean;
   queuePrefix: string;
+  /** Allow webhooks to private/loopback addresses (disable in production to prevent SSRF). */
+  webhookAllowPrivate: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -31,6 +33,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE ?? 600),
     realtimeRedisAdapter: (env.REALTIME_REDIS_ADAPTER ?? 'true') !== 'false',
     queuePrefix: env.QUEUE_PREFIX ?? 'workora',
+    webhookAllowPrivate: (env.WEBHOOK_ALLOW_PRIVATE ?? (env.NODE_ENV === 'production' ? 'false' : 'true')) === 'true',
   };
 }
 

@@ -23,19 +23,26 @@ export class ProjectsService {
     private readonly events: EventBus,
   ) {}
 
-  async list(orgId: string, status?: ProjectStatus) {
+  private async favoriteIds(userId?: string) {
+    if (!userId) return new Set<string>();
+    const rows: { project_id: string }[] = await this.dataSource.query('SELECT project_id FROM favorites WHERE user_id = $1', [userId]);
+    return new Set(rows.map((r) => r.project_id));
+  }
+
+  async list(orgId: string, status?: ProjectStatus, userId?: string) {
     const projects = await this.dataSource.getRepository(Project).find({
       where: { organizationId: orgId, ...(status ? { status } : {}) },
       relations: { owner: true },
       order: { name: 'ASC' },
     });
-    const counts = await this.taskCounts(orgId);
-    return projects.map((p) => toProjectDto(p, counts.get(p.id)));
+    const [counts, favorites] = await Promise.all([this.taskCounts(orgId), this.favoriteIds(userId)]);
+    return projects.map((p) => toProjectDto(p, counts.get(p.id), favorites.has(p.id)));
   }
 
-  async get(orgId: string, idOrKey: string) {
+  async get(orgId: string, idOrKey: string, userId?: string) {
     const project = await findProject(this.dataSource.manager, orgId, idOrKey);
-    return toProjectDto(project, (await this.taskCounts(orgId, project.id)).get(project.id));
+    const [counts, favorites] = await Promise.all([this.taskCounts(orgId, project.id), this.favoriteIds(userId)]);
+    return toProjectDto(project, counts.get(project.id), favorites.has(project.id));
   }
 
   async create(principal: AuthPrincipal, dto: CreateProjectDto) {
@@ -74,7 +81,7 @@ export class ProjectsService {
       if (Object.keys(changes).length) await m.save(project);
       return { project, changes };
     });
-    const dto$ = await this.get(principal.organizationId, project.id);
+    const dto$ = await this.get(principal.organizationId, project.id, principal.userId);
     if (Object.keys(changes).length) {
       this.events.publish('PROJECT_UPDATED', { organizationId: principal.organizationId, projectId: project.id, actor: actorOf(principal), data: { project: dto$, changes } });
     }

@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { toLabelDto } from '../labels/label.entity';
+import { TaskLinkType } from './task-link.entity';
 import { toUserSummary } from '../users/user.entity';
 import { Task, TaskPriority, TaskStatus, TaskType } from './task.entity';
 
@@ -16,6 +18,9 @@ export class CreateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000) storyPoints?: number | null;
   @IsOptional() @IsDateString() startDate?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  @IsOptional() @IsUUID() parentId?: string | null;
+  @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
 }
 
 /** PATCH semantics: omitted fields are left unchanged; `null` clears a nullable field. */
@@ -30,6 +35,9 @@ export class UpdateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000) storyPoints?: number | null;
   @IsOptional() @IsDateString() startDate?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  @IsOptional() @IsUUID() parentId?: string | null;
+  @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
 }
 
 export class MoveTaskDto {
@@ -48,6 +56,9 @@ export class ListTasksQuery {
   @IsOptional() @Matches(/^(none|active|[0-9a-fA-F-]{36})$/) sprintId?: string;
   @IsOptional() @IsEnum(TaskType) type?: TaskType;
   @IsOptional() @IsEnum(TaskPriority) priority?: TaskPriority;
+  @IsOptional() @IsUUID() labelId?: string;
+  /** Parent task UUID, or `none` for top-level tasks only. */
+  @IsOptional() @Matches(/^(none|[0-9a-fA-F-]{36})$/) parentId?: string;
   @IsOptional() @IsString() @MaxLength(200) q?: string;
   @IsOptional() @IsDateString() dueFrom?: string;
   @IsOptional() @IsDateString() dueTo?: string;
@@ -58,7 +69,33 @@ export class ListTasksQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) size?: number;
 }
 
-export function toTaskDto(t: Task) {
+export class AddLinkDto {
+  /** Target task UUID or key. */
+  @IsString() targetId: string;
+  @IsEnum(TaskLinkType) type: TaskLinkType;
+  /** `blocked_by` flips the direction: the target blocks this task. */
+  @IsOptional() @IsIn(['outgoing', 'incoming']) direction?: 'outgoing' | 'incoming';
+}
+
+export class WatchDto {
+  @IsOptional() @IsUUID() userId?: string;
+}
+
+export class BulkUpdateDto {
+  @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) ids: string[];
+  @ValidateNested() @Type(() => UpdateTaskDto) patch: UpdateTaskDto;
+}
+
+export interface TaskStats {
+  subtaskCount: number;
+  subtaskDone: number;
+  blockedBy: number;
+  loggedMinutes: number;
+  commentCount: number;
+}
+export const EMPTY_STATS: TaskStats = { subtaskCount: 0, subtaskDone: 0, blockedBy: 0, loggedMinutes: 0, commentCount: 0 };
+
+export function toTaskDto(t: Task, stats: TaskStats = EMPTY_STATS) {
   return {
     id: t.id,
     key: t.key,
@@ -77,6 +114,11 @@ export function toTaskDto(t: Task) {
     startDate: t.startDate,
     dueDate: t.dueDate,
     completedAt: t.completedAt,
+    parentId: t.parentId,
+    parent: t.parent ? { id: t.parent.id, key: t.parent.key, title: t.parent.title, type: t.parent.type } : null,
+    estimateMinutes: t.estimateMinutes,
+    labels: (t.labels ?? []).map(toLabelDto).sort((a, b) => a.name.localeCompare(b.name)),
+    ...stats,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
     version: t.version,

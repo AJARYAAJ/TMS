@@ -21,6 +21,12 @@ interface Draft {
   email?: boolean;
 }
 
+/** One notification per user per event (a mention wins over a plain "commented"). */
+function dedupe(drafts: Draft[]) {
+  const seen = new Set<string>();
+  return drafts.filter((d) => !seen.has(d.userId) && seen.add(d.userId));
+}
+
 const toNotificationDto = (n: Notification) => ({
   id: n.id,
   type: n.type,
@@ -51,7 +57,8 @@ export class NotificationListener {
   @OnEvent(DOMAIN_EVENT, { async: true, promisify: true })
   async handle(e: DomainEvent) {
     try {
-      const drafts = (await this.draft(e)).filter((d) => d.userId !== e.actor?.id);
+      // Never notify people about their own actions — except rule-driven ones they didn't make by hand.
+      const drafts = dedupe(await this.draft(e)).filter((d) => d.userId !== e.actor?.id || (!!e.actor?.automation && e.type === 'AUTOMATION_RAN'));
       if (!drafts.length) return;
       const task = e.data?.task;
       const rows = await this.dataSource.getRepository(Notification).save(
@@ -95,13 +102,22 @@ export class NotificationListener {
       case 'COMMENT_CREATED': {
         const mentioned = new Set<string>(d.mentionedUserIds);
         const drafts: Draft[] = [...mentioned].map((userId) => ({ userId, type: 'MENTIONED', title: `${who} mentioned you in ${d.task.key}`, body: d.comment.body.slice(0, 280), email: true }));
-        const watchers = [d.task.assignee?.id, d.task.reporter?.id].filter((id): id is string => !!id && !mentioned.has(id));
-        for (const userId of new Set(watchers)) drafts.push({ userId, type: e.type, title: `${who} commented on ${d.task.key}`, body: d.comment.body.slice(0, 280) });
+        const watchers = (await this.watcherIds(d.task.id, [d.task.assignee?.id, d.task.reporter?.id])).filter((id) => !mentioned.has(id));
+        for (const userId of watchers) drafts.push({ userId, type: e.type, title: `${who} commented on ${d.task.key}`, body: d.comment.body.slice(0, 280) });
         return drafts;
       }
-      case 'TASK_UPDATED':
-        if (!d.changes.status || !d.task.reporter || d.task.reporter.id === d.task.assignee?.id) return [];
-        return [{ userId: d.task.reporter.id, type: 'TASK_STATUS_CHANGED', title: `${d.task.key} moved to ${String(d.changes.status.to).replace(/_/g, ' ').toLowerCase()}`, body: d.task.title }];
+      case 'TASK_UPDATED': {
+        if (!d.changes.status) return [];
+        const assignee = d.task.assignee?.id;
+        const status = String(d.changes.status.to).replace(/_/g, ' ').toLowerCase();
+        return (await this.watcherIds(d.task.id, [d.task.reporter?.id]))
+          .filter((id) => id !== assignee || !!e.actor?.automation)
+          .map((userId) => ({ userId, type: 'TASK_STATUS_CHANGED', title: `${who} moved ${d.task.key} to ${status}`, body: d.task.title }));
+      }
+      case 'TASK_OVERDUE':
+        return d.task.assignee ? [{ userId: d.task.assignee.id, type: e.type, title: `${d.task.key} is overdue`, body: `${d.task.title} was due ${d.task.dueDate}`, email: true }] : [];
+      case 'AUTOMATION_RAN':
+        return (d.notify as { userIds: string[]; message: string }[]).flatMap((n) => n.userIds.map((userId) => ({ userId, type: 'AUTOMATION', title: n.message, body: `${d.automation.name} · ${d.task.key}` })));
       case 'SPRINT_STARTED':
       case 'SPRINT_COMPLETED': {
         const assignees = await this.dataSource.getRepository(Task).find({ select: { assigneeId: true }, where: { sprintId: d.sprint.id } });
@@ -113,6 +129,11 @@ export class NotificationListener {
       default:
         return [];
     }
+  }
+
+  private async watcherIds(taskId: string, extra: (string | undefined)[] = []) {
+    const rows: { user_id: string }[] = await this.dataSource.query('SELECT user_id FROM task_watchers WHERE task_id = $1', [taskId]);
+    return [...new Set([...rows.map((r) => r.user_id), ...extra.filter((x): x is string => !!x)])];
   }
 
   private async queueEmails(drafts: Draft[]) {

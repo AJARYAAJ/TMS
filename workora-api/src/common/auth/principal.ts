@@ -7,6 +7,8 @@ export interface AuthPrincipal {
   role: Role;
   email: string;
   name: string;
+  /** Set when the action is performed by the automation engine on the user's behalf. */
+  automation?: string;
 }
 
 export interface JwtPayload {
@@ -17,6 +19,9 @@ export interface JwtPayload {
 export interface Actor {
   id: string;
   name: string;
+  /** Automation id when the change was made by a rule (prevents rule loops). */
+  automation?: string;
 }
 
-export const actorOf = (p: AuthPrincipal): Actor => ({ id: p.userId, name: p.name });
+export const actorOf = (p: AuthPrincipal): Actor =>
+  p.automation ? { id: p.userId, name: p.name, automation: p.automation } : { id: p.userId, name: p.name };

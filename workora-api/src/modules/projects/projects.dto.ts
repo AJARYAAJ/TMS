@@ -16,7 +16,7 @@ export class UpdateProjectDto {
   @IsOptional() @IsEnum(ProjectStatus) status?: ProjectStatus;
 }
 
-export function toProjectDto(p: Project, counts?: { total: number; open: number }) {
+export function toProjectDto(p: Project, counts?: { total: number; open: number }, isFavorite = false) {
   return {
     id: p.id,
     key: p.key,
@@ -27,6 +27,7 @@ export function toProjectDto(p: Project, counts?: { total: number; open: number 
     owner: toUserSummary(p.owner),
     taskCount: counts?.total ?? 0,
     openTaskCount: counts?.open ?? 0,
+    isFavorite,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
