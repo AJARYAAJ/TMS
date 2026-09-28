@@ -36,25 +36,45 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 
 ## What's implemented
 
+**Work management**
+
 | Area | Details |
 |------|---------|
-| **SPA** | Client-side routing (`/workora/projects/ECOM/board` …), no full-page reloads anywhere in the normal workflow |
-| **Task drawer** | Tasks open over the current screen via `?task=ECOM-102` (shareable, back-button friendly); inline editing, comments with @mentions, attachments, activity |
-| **Views** | Dashboard, My Work, Projects, project Overview / List / Board / Calendar / Timeline / Backlog / Sprint / Reports, Teams, Administration |
-| **Drag & drop** | Kanban with optimistic moves, rollback + “Couldn't move task. Please try again.” on failure |
-| **Real-time** | socket.io gateway; board, drawer, notifications and dashboards update live for every viewer |
-| **Caching** | TanStack Query stale-while-revalidate; drawer/project headers render instantly from cached lists |
-| **Lazy loading** | Everything except the app shell, auth and dashboard is code-split per module |
-| **Loading UX** | Skeletons, inline “Saving…”, no full-screen spinners |
-| **Search** | Debounced global search + Ctrl K palette, backed by PostgreSQL full-text search (GIN indexes) |
-| **API** | Versioned `/api/v1`, uniform `{ success, data, meta }` / `{ success, error: { code, message } }` envelope, OpenAPI docs |
-| **Security** | JWT auth, organization-scoped data (multi-tenant), RBAC (Owner › Admin › Member › Viewer), Redis-backed rate limiting |
-| **Events** | Domain events (`TASK_UPDATED`, `COMMENT_CREATED`, `SPRINT_STARTED`…) published after commit and consumed by activity log, notifications, realtime relay and job scheduler |
-| **Background jobs** | BullMQ: project setup (default sprint), email delivery for notifications |
-| **Files** | Signed-URL uploads/downloads (local disk driver; swap for S3/GCS presigned URLs) |
+| **Tasks & issues** | Types (task, bug, story, epic), epics → tasks → subtasks with progress roll-up, labels, watchers, estimates, story points, start/due dates |
+| **Dependencies** | *blocks / blocked by / relates / duplicates*, cycle detection, blocked badges on cards |
+| **Views** | Overview, List (filters + multi-select bulk edit), Board (drag & drop), Backlog, Sprint, Calendar, Timeline, Roadmap, Goals, Docs, Reports, Automations |
+| **Sprints** | Plan, start (one active per project), complete (unfinished work returns to the backlog) |
+| **Time tracking** | One live timer per user (shown in the command bar), manual logs (“1h 30m”), weekly timesheet, estimate vs. logged |
+| **Goals / OKRs** | Objectives with manual key results or ones computed from linked tasks; status and progress roll-up |
+| **Docs** | Markdown pages per project or workspace, autosave, version-conflict detection, task keys auto-link, full-text search |
+| **Automations** | *When → If → Then* rules (status/priority change, created, assigned, commented, overdue → set fields, assign, label, move sprint, comment, notify). Loop-safe |
+| **Integrations** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
+| **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live), Inbox page, email queue |
+| **Workspace** | Multi-tenant organizations, RBAC (Owner › Admin › Member › Viewer), teams, labels, favourites pinned to the dock |
 
-Not yet built: Goals and Documents modules (routes and navigation are in place), automations,
-third-party integrations, refresh tokens, SMTP transport (emails are logged).
+**Platform**
+
+| Area | Details |
+|------|---------|
+| **SPA** | Client-side routing under `/workora`, no full-page reloads; tasks open in a floating sheet via `?task=ECOM-102` |
+| **Optimistic UI** | Board drags, property edits, comments and bulk edits update instantly and roll back on failure |
+| **Real-time** | socket.io gateway (Redis adapter) — boards, sheets, docs, goals, notifications update live for every viewer |
+| **Caching & loading** | TanStack Query stale-while-revalidate; lazy-loaded modules; skeletons and inline “Saving…” states |
+| **Search** | Debounced global search + Ctrl K palette over tasks, projects, people, comments and docs (PostgreSQL FTS) |
+| **API** | Versioned `/api/v1`, uniform `{ success, data, meta }` / `{ success, error }` envelope, OpenAPI at `/api/docs` |
+| **Events & jobs** | Domain events after commit → activity log, notifications, realtime, automations, webhooks; BullMQ jobs |
+| **Security** | JWT, tenant isolation, RBAC, Redis rate limiting, signed file URLs, webhook SSRF guard in production |
+
+### UI: “Paper & Volt”
+
+The interface deliberately avoids the usual sidebar-plus-cards template: a floating **ink dock** (favourite projects
+appear as app icons), a glassy **command bar** with a live timer chip, a **bento** home with a Focus tile and a
+completion heatmap, borderless floating surfaces on a dotted paper canvas, an electric-lime accent, Space Grotesk
+display type, property **pills** with popover pickers, and a floating task **sheet**. Light and dark themes; on phones
+the dock becomes a bottom tab bar.
+
+Not yet built: third-party app integrations beyond webhooks (Slack/GitHub apps), custom workflow statuses,
+recurring tasks, refresh tokens, SMTP transport (emails are logged).
 
 ## Testing
 
@@ -62,8 +82,9 @@ third-party integrations, refresh tokens, SMTP transport (emails are logged).
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-The e2e suite covers the envelope and error codes, key-based task lookup, PATCH semantics, board
-ordering, RBAC, tenant isolation, mentions → notifications, websocket delivery, signed uploads,
-full-text search, sprints and reports.
+Two e2e suites (25 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
+epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
+prevention), signed webhook deliveries, bulk edit, favourites and overdue reminders.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

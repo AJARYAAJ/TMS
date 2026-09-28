@@ -14,10 +14,10 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { AlertOctagon, CheckSquare, Clock, MessageSquare, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUiStore } from '@/app/ui.store';
-import { Avatar, PriorityIcon, Skeleton, TypeIcon } from '@/components/ui';
+import { Avatar, formatMinutes, LabelChip, PriorityIcon, Skeleton, TypeIcon } from '@/components/ui';
 import { useCan } from '@/features/auth/session.store';
 import { useBoard, useMoveTask } from '@/features/tasks/api';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
@@ -180,15 +180,52 @@ function SortableCard({ task, disabled }: { task: Task; disabled: boolean }) {
 
 function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
   const openTask = useOpenTask();
+  const overdue = isOverdue(task.dueDate, task.status);
   return (
-    <article className={`task-card${overlay ? ' overlay' : ''}`} onClick={() => !overlay && openTask(task.key)} onKeyDown={(e) => e.key === 'Enter' && openTask(task.key)}>
-      <p className="task-card-title">{task.title}</p>
-      <div className="task-card-meta">
+    <article
+      className={`task-card status-${task.status.toLowerCase()} prio-${task.priority.toLowerCase()}${overlay ? ' overlay' : ''}${task.blockedBy ? ' blocked' : ''}`}
+      onClick={() => !overlay && openTask(task.key)}
+      onKeyDown={(e) => e.key === 'Enter' && openTask(task.key)}
+    >
+      <div className="card-top">
         <TypeIcon type={task.type} />
-        <span className="task-key">{task.key}</span>
-        <PriorityIcon priority={task.priority} />
+        <span className="mono">{task.key}</span>
+        {task.parent && <span className="card-epic ellipsis" title={task.parent.title}>{task.parent.title}</span>}
+        <span className="ml-auto">
+          <PriorityIcon priority={task.priority} />
+        </span>
+      </div>
+      <p className="task-card-title">{task.title}</p>
+      {task.labels.length > 0 && (
+        <div className="card-labels">
+          {task.labels.slice(0, 3).map((l) => (
+            <LabelChip key={l.id} label={l} />
+          ))}
+        </div>
+      )}
+      <div className="task-card-meta">
+        {task.blockedBy > 0 && (
+          <span className="meta-blocked" title={`Blocked by ${task.blockedBy} task(s)`}>
+            <AlertOctagon size={12} /> blocked
+          </span>
+        )}
+        {task.subtaskCount > 0 && (
+          <span title="Subtasks done">
+            <CheckSquare size={12} /> {task.subtaskDone}/{task.subtaskCount}
+          </span>
+        )}
+        {task.commentCount > 0 && (
+          <span title="Comments">
+            <MessageSquare size={12} /> {task.commentCount}
+          </span>
+        )}
+        {task.loggedMinutes > 0 && (
+          <span title="Time logged">
+            <Clock size={12} /> {formatMinutes(task.loggedMinutes)}
+          </span>
+        )}
         {task.storyPoints != null && <span className="points">{task.storyPoints}</span>}
-        {task.dueDate && <span className={`due${isOverdue(task.dueDate, task.status) ? ' overdue' : ''}`}>{formatDate(task.dueDate)}</span>}
+        {task.dueDate && <span className={`due${overdue ? ' overdue' : ''}`}>{formatDate(task.dueDate)}</span>}
         <span className="ml-auto">
           <Avatar user={task.assignee} size={22} />
         </span>

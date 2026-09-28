@@ -3,7 +3,7 @@ import { toast } from '@/components/ui/toast';
 import { api, errorMessage } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
 import { useSessionStore } from '@/features/auth/session.store';
-import type { Activity, Attachment, Board, Comment, Task, TaskPriority, TaskStatus, TaskType } from '@/types';
+import type { Activity, Attachment, Board, Comment, Label, Task, TaskDetail, TaskLinkItem, TaskPriority, TaskStatus, TaskType, TimeEntry, UserSummary } from '@/types';
 import { findCachedTask, invalidateTaskViews, patchCachedTask, removeCachedTask, snapshotTaskCaches } from './cache';
 
 export interface TaskFilters {
@@ -14,6 +14,8 @@ export interface TaskFilters {
   type?: TaskType;
   priority?: TaskPriority;
   q?: string;
+  labelId?: string;
+  parentId?: string;
   open?: 'true' | 'false';
   dueFrom?: string;
   dueTo?: string;
@@ -23,8 +25,9 @@ export interface TaskFilters {
   size?: number;
 }
 
-export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'type' | 'status' | 'priority' | 'sprintId' | 'storyPoints' | 'startDate' | 'dueDate'>> & {
+export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'type' | 'status' | 'priority' | 'sprintId' | 'storyPoints' | 'startDate' | 'dueDate' | 'parentId' | 'estimateMinutes'>> & {
   assigneeId?: string | null;
+  labelIds?: string[];
 };
 
 export function useTasks(filters: TaskFilters, enabled = true) {
@@ -48,9 +51,9 @@ export function useTask(key: string | null) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: qk.task(key ?? ''),
-    queryFn: () => api.get<Task>(`/tasks/${key}`),
+    queryFn: () => api.get<TaskDetail>(`/tasks/${key}`),
     enabled: !!key,
-    placeholderData: () => (key ? findCachedTask(qc, key) : undefined),
+    placeholderData: () => (key ? (findCachedTask(qc, key) as TaskDetail | undefined) : undefined),
   });
 }
 
@@ -183,4 +186,133 @@ export function useDeleteAttachment(taskKey: string) {
 
 export function useTaskActivity(taskKey: string) {
   return useQuery({ queryKey: qk.taskActivity(taskKey), queryFn: () => api.get<Activity[]>(`/tasks/${taskKey}/activity`) });
+}
+
+/* ─────────── Subtasks, labels, watchers, links ─────────── */
+
+export function useSubtasks(taskKey: string) {
+  return useQuery({ queryKey: qk.subtasks(taskKey), queryFn: () => api.get<Task[]>(`/tasks/${taskKey}/subtasks`) });
+}
+
+export function useLabels() {
+  return useQuery({ queryKey: qk.labels, queryFn: () => api.get<Label[]>('/labels'), staleTime: 60_000 });
+}
+
+export function useCreateLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; color: string }) => api.post<Label>('/labels', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.labels }),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+export function useDeleteLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/labels/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.labels }),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+/** Watch / unwatch (self or someone else); updates the drawer's watcher list in place. */
+export function useWatch(taskKey: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, on }: { userId?: string; on: boolean }) =>
+      on ? api.post<UserSummary[]>(`/tasks/${taskKey}/watchers`, userId ? { userId } : {}) : api.delete<UserSummary[]>(`/tasks/${taskKey}/watchers/${userId}`),
+    onSuccess: (watchers) => qc.setQueryData<TaskDetail>(qk.task(taskKey), (t) => (t ? { ...t, watchers } : t)),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+export function useLinkMutations(task: Task) {
+  const qc = useQueryClient();
+  const set = (links: TaskLinkItem[]) => {
+    qc.setQueryData<TaskDetail>(qk.task(task.key), (t) => (t ? { ...t, links } : t));
+    qc.invalidateQueries({ queryKey: qk.task(task.key) });
+    invalidateTaskViews(qc, task.projectId);
+  };
+  return {
+    add: useMutation({
+      mutationFn: (body: { targetId: string; type: string; direction?: 'outgoing' | 'incoming' }) => api.post<TaskLinkItem[]>(`/tasks/${task.key}/links`, body),
+      onSuccess: set,
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+    remove: useMutation({
+      mutationFn: (linkId: string) => api.delete<TaskLinkItem[]>(`/tasks/${task.key}/links/${linkId}`),
+      onSuccess: set,
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+  };
+}
+
+export function useBulkUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, patch }: { ids: string[]; patch: TaskPatch; projectId?: string }) => api.patch<{ updated: Task[]; failed: { id: string; message: string }[] }>('/tasks/bulk', { ids, patch }),
+    onSuccess: (r) => {
+      r.updated.forEach((t) => patchCachedTask(qc, t.id, () => t));
+      if (r.failed.length) toast.error(`${r.failed.length} task(s) could not be updated`);
+      else toast.success(`Updated ${r.updated.length} task(s)`);
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+    onSettled: (_d, _e, v) => invalidateTaskViews(qc, v.projectId),
+  });
+}
+
+/* ─────────── Time tracking ─────────── */
+
+export function useRunningTimer() {
+  return useQuery({ queryKey: qk.timer, queryFn: () => api.get<TimeEntry | null>('/timer'), staleTime: 60_000 });
+}
+
+export function useTimeEntries(taskKey: string) {
+  return useQuery({ queryKey: qk.timeEntries(taskKey), queryFn: () => api.get<TimeEntry[]>(`/tasks/${taskKey}/time-entries`) });
+}
+
+export function useTimer() {
+  const qc = useQueryClient();
+  const refresh = (e?: TimeEntry) => {
+    qc.invalidateQueries({ queryKey: ['time'] });
+    qc.invalidateQueries({ queryKey: qk.dashboard });
+    if (e?.task) {
+      qc.invalidateQueries({ queryKey: qk.task(e.task.key) });
+      invalidateTaskViews(qc, e.task.projectId);
+    }
+  };
+  return {
+    start: useMutation({
+      mutationFn: (taskKey: string) => api.post<TimeEntry>(`/tasks/${taskKey}/timer`),
+      onSuccess: (e) => {
+        qc.setQueryData(qk.timer, e);
+        refresh();
+        toast.info(`Timer started on ${e.task?.key}`);
+      },
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+    stop: useMutation({
+      mutationFn: () => api.post<TimeEntry>('/timer/stop'),
+      onSuccess: (e) => {
+        qc.setQueryData(qk.timer, null);
+        refresh(e);
+        toast.success(`Logged ${e.minutes}m on ${e.task?.key}`);
+      },
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+    log: useMutation({
+      mutationFn: ({ taskKey, minutes, note, date }: { taskKey: string; minutes: number; note?: string; date?: string }) => api.post<TimeEntry>(`/tasks/${taskKey}/time-entries`, { minutes, note, date }),
+      onSuccess: (e) => {
+        refresh(e);
+        toast.success(`Logged ${e.minutes}m`);
+      },
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => api.delete(`/time-entries/${id}`),
+      onSuccess: () => refresh(),
+      onError: (e) => toast.error(errorMessage(e)),
+    }),
+  };
 }

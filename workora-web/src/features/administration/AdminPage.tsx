@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Avatar, SkeletonRows, Spinner } from '@/components/ui';
 import { useCan, useSession } from '@/features/auth/session.store';
 import { TeamsPanel } from '@/features/teams/TeamsPage';
+import { IntegrationsPanel, LabelsPanel } from './ExtraPanels';
 import { ApiError, errorMessage } from '@/services/api/client';
 import type { Role } from '@/types';
 import { formatDate } from '@/utils/format';
@@ -12,16 +13,16 @@ const ROLES: Role[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
 /** Administration module (lazy-loaded): members, roles (RBAC) and teams. */
 export default function AdminPage() {
-  const [tab, setTab] = useState<'members' | 'teams'>('members');
+  const [tab, setTab] = useState<'members' | 'teams' | 'labels' | 'integrations'>('members');
   const session = useSession()!;
   return (
     <div className="page">
-      <div className="page-header">
+      <header className="page-head">
         <div>
-          <h1>Administration</h1>
-          <p className="muted">{session.organization.name}</p>
+          <span className="eyebrow">{session.organization.name}</span>
+          <h1 className="display-sm">Admin</h1>
         </div>
-      </div>
+      </header>
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'active' : ''} onClick={() => setTab('members')}>
           Members & roles
@@ -29,8 +30,14 @@ export default function AdminPage() {
         <button role="tab" aria-selected={tab === 'teams'} className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>
           Teams
         </button>
+        <button role="tab" aria-selected={tab === 'labels'} className={tab === 'labels' ? 'active' : ''} onClick={() => setTab('labels')}>
+          Labels
+        </button>
+        <button role="tab" aria-selected={tab === 'integrations'} className={tab === 'integrations' ? 'active' : ''} onClick={() => setTab('integrations')}>
+          Integrations
+        </button>
       </div>
-      {tab === 'members' ? <Members /> : <TeamsPanel />}
+      {tab === 'members' ? <Members /> : tab === 'teams' ? <TeamsPanel /> : tab === 'labels' ? <LabelsPanel /> : <IntegrationsPanel />}
     </div>
   );
 }
@@ -44,7 +51,7 @@ function Members() {
 
   return (
     <div className="admin-grid">
-      <section className="card">
+      <section className="tile">
         <h2>Members</h2>
         {isLoading ? (
           <SkeletonRows rows={4} />
@@ -116,7 +123,7 @@ function AddMember() {
     );
   };
   return (
-    <section className="card">
+    <section className="tile">
       <h2>Add member</h2>
       <form className="form" onSubmit={submit}>
         <label>

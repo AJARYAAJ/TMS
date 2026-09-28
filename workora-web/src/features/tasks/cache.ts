@@ -23,7 +23,8 @@ export function findCachedTask(qc: QueryClient, key: string): Task | undefined {
 
 /** Applies `update` to a task wherever it is cached (detail, boards, lists). */
 export function patchCachedTask(qc: QueryClient, id: string, update: (t: Task) => Task) {
-  qc.setQueriesData<Task>({ queryKey: ['task'] }, (t) => (t && t.id === id ? update(t) : t));
+  // Detail entries carry extra fields (watchers, links): merge rather than replace.
+  qc.setQueriesData<Task>({ queryKey: ['task'] }, (t) => (t && t.id === id ? { ...t, ...update(t) } : t));
   qc.setQueriesData<Board>({ queryKey: ['board'] }, (b) =>
     b ? { ...b, columns: b.columns.map((c) => ({ ...c, tasks: c.tasks.map((t) => (t.id === id ? update(t) : t)) })) } : b,
   );

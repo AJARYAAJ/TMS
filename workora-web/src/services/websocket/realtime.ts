@@ -84,8 +84,8 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
     case 'TASK_UPDATED':
     case 'TASK_ASSIGNED': {
       const task: Task = e.data.task;
-      qc.setQueryData(qk.task(task.key), task);
       patchCachedTask(qc, task.id, () => task);
+      if (task.parentId) qc.invalidateQueries({ queryKey: ['subtasks'] });
       // Ordering of neighbours may have changed: refetch boards/lists in the background.
       if (!fromSelf) invalidateTaskViews(qc, task.projectId);
       qc.invalidateQueries({ queryKey: qk.taskActivity(task.key) });
@@ -98,6 +98,26 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
       if (!fromSelf) invalidateTaskViews(qc, task.projectId);
       break;
     }
+    case 'TASK_LINKED':
+    case 'TIME_LOGGED':
+      qc.invalidateQueries({ queryKey: qk.task(e.data.task.key) });
+      qc.invalidateQueries({ queryKey: ['time'] });
+      if (e.projectId) invalidateTaskViews(qc, e.projectId);
+      break;
+    case 'DOCUMENT_CREATED':
+    case 'DOCUMENT_UPDATED':
+    case 'DOCUMENT_DELETED':
+      qc.invalidateQueries({ queryKey: ['documents'] });
+      if (!fromSelf) qc.invalidateQueries({ queryKey: qk.document(e.data.document.id) });
+      break;
+    case 'GOAL_CREATED':
+    case 'GOAL_UPDATED':
+      qc.invalidateQueries({ queryKey: qk.goals });
+      break;
+    case 'AUTOMATION_RAN':
+      if (e.projectId) qc.invalidateQueries({ queryKey: qk.automations(e.projectId) });
+      qc.invalidateQueries({ queryKey: qk.comments(e.data.task.key) });
+      break;
     case 'COMMENT_CREATED':
       qc.invalidateQueries({ queryKey: qk.comments(e.data.task.key) });
       qc.invalidateQueries({ queryKey: qk.taskActivity(e.data.task.key) });

@@ -36,7 +36,7 @@ export function TeamsPanel() {
       ) : (
         <div className="project-grid">
           {teams.map((t) => (
-            <div key={t.id} className="card">
+            <div key={t.id} className="tile">
               <div className="card-header">
                 <h2>{t.name}</h2>
                 {canAdmin && (
@@ -82,12 +82,12 @@ export function TeamsPanel() {
 export default function TeamsPage() {
   return (
     <div className="page">
-      <div className="page-header">
+      <header className="page-head">
         <div>
-          <h1>Teams</h1>
-          <p className="muted">Groups of people in this workspace</p>
+          <span className="eyebrow">People</span>
+          <h1 className="display-sm">Teams</h1>
         </div>
-      </div>
+      </header>
       <TeamsPanel />
     </div>
   );

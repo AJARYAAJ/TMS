@@ -8,15 +8,38 @@ import { useSession } from './session.store';
 function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <section className="auth-manifesto" aria-hidden="true">
         <div className="brand brand-lg">
-          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={32} height={32} />
+          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={34} height={34} />
           <span>Workora</span>
         </div>
-        <h1>{title}</h1>
-        <p className="muted">{subtitle}</p>
-        {children}
-      </div>
+        <h2 className="manifesto">
+          Plan it.
+          <br />
+          Ship it.
+          <br />
+          <span className="outline">Together,</span>
+          <br />
+          in real time.
+        </h2>
+        <ul className="manifesto-points">
+          <li>Boards, sprints, roadmaps & goals</li>
+          <li>Live updates — no refresh, ever</li>
+          <li>Automations that do the busywork</li>
+        </ul>
+        <div className="orbs">
+          <span />
+          <span />
+          <span />
+        </div>
+      </section>
+      <section className="auth-form-side">
+        <div className="auth-card">
+          <h1 className="display-sm">{title}</h1>
+          <p className="muted">{subtitle}</p>
+          {children}
+        </div>
+      </section>
     </div>
   );
 }
@@ -46,7 +69,7 @@ export function LoginPage() {
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
         </label>
         {login.isError && <div className="form-error">{errorMessage(login.error)}</div>}
-        <button className="btn btn-primary btn-block" disabled={login.isPending}>
+        <button className="btn btn-ink btn-block btn-lg" disabled={login.isPending}>
           {login.isPending ? <Spinner /> : 'Sign in'}
         </button>
       </form>
@@ -93,7 +116,7 @@ export function RegisterPage() {
           <input value={form.organizationName} onChange={set('organizationName')} placeholder="Acme Inc" required />
         </label>
         {register.isError && <div className="form-error">{errorMessage(register.error)}</div>}
-        <button className="btn btn-primary btn-block" disabled={register.isPending}>
+        <button className="btn btn-ink btn-block btn-lg" disabled={register.isPending}>
           {register.isPending ? <Spinner /> : 'Create workspace'}
         </button>
       </form>

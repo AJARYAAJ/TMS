@@ -7,7 +7,9 @@ import { useProjects, useUsers } from '@/features/projects/api';
 import { errorMessage } from '@/services/api/client';
 import { TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES, TaskPriority, TaskStatus, TaskType } from '@/types';
 import { PRIORITY_LABEL, STATUS_LABEL, TYPE_LABEL } from '@/utils/format';
-import { useCreateTask } from './api';
+import { useCreateTask, useLabels, useTasks } from './api';
+import { Picker } from '@/components/ui/Picker';
+import { LabelChip } from '@/components/ui';
 import { useOpenTask } from './useOpenTask';
 
 export function CreateTaskDialog() {
@@ -18,12 +20,14 @@ export function CreateTaskDialog() {
   const create = useCreateTask();
   const openTask = useOpenTask();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ projectId: '', title: '', type: 'TASK' as TaskType, status: 'TODO' as TaskStatus, priority: 'MEDIUM' as TaskPriority, assigneeId: '', dueDate: '', description: '' });
+  const [form, setForm] = useState({ projectId: '', title: '', type: 'TASK' as TaskType, status: 'TODO' as TaskStatus, priority: 'MEDIUM' as TaskPriority, assigneeId: '', dueDate: '', description: '', parentId: '', labelIds: [] as string[] });
+  const { data: labels } = useLabels();
+  const { data: epics } = useTasks({ projectId: form.projectId, type: 'EPIC', size: 100 }, !!form.projectId && !!intent);
 
   useEffect(() => {
     if (!intent) return;
     const project = projects?.find((p) => p.key === intent.projectId?.toUpperCase() || p.id === intent.projectId) ?? projects?.find((p) => p.status === 'ACTIVE');
-    setForm((f) => ({ ...f, projectId: project?.id ?? '', title: '', description: '', status: intent.status ?? 'TODO', dueDate: '', assigneeId: '' }));
+    setForm((f) => ({ ...f, projectId: project?.id ?? '', title: '', description: '', status: intent.status ?? 'TODO', dueDate: '', assigneeId: '', parentId: '', labelIds: [] }));
     create.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent, projects]);
@@ -41,6 +45,8 @@ export function CreateTaskDialog() {
         dueDate: form.dueDate || null,
         description: form.description,
         sprintId: intent?.sprintId ?? undefined,
+        parentId: form.parentId || undefined,
+        labelIds: form.labelIds,
       },
       {
         onSuccess: (task) => {
@@ -133,6 +139,31 @@ export function CreateTaskDialog() {
               <input type="date" value={form.dueDate} onChange={set('dueDate')} />
             </label>
           </div>
+          <div className="form-row">
+            <label>
+              Epic
+              <select value={form.parentId} onChange={set('parentId')}>
+                <option value="">No epic</option>
+                {epics?.data.filter((e) => e.type === 'EPIC').map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.key} · {e.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="label-field">
+              <span>Labels</span>
+              <Picker
+                label="Labels"
+                value={form.labelIds}
+                searchable
+                options={(labels ?? []).map((l) => ({ value: l.id, label: l.name, icon: <span className="dot" style={{ background: l.color }} /> }))}
+                onChange={(_v, all) => setForm({ ...form, labelIds: all ?? [] })}
+              >
+                <span className="prop">{form.labelIds.length ? labels?.filter((l) => form.labelIds.includes(l.id)).map((l) => <LabelChip key={l.id} label={l} />) : 'Add labels'}</span>
+              </Picker>
+            </div>
+          </div>
           <label>
             Description
             <textarea rows={3} value={form.description} onChange={set('description')} />
@@ -142,7 +173,7 @@ export function CreateTaskDialog() {
             <button type="button" className="btn btn-ghost" onClick={close}>
               Cancel
             </button>
-            <button className="btn btn-primary" disabled={create.isPending || !form.projectId}>
+            <button className="btn btn-volt" disabled={create.isPending || !form.projectId}>
               {create.isPending ? <Spinner /> : 'Create task'}
             </button>
           </div>

@@ -41,12 +41,12 @@ export default function MyWorkPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <header className="page-head">
         <div>
-          <h1>{person ? `${person.name}'s work` : 'My Work'}</h1>
-          <p className="muted">{person ? 'Tasks assigned to this person across all projects' : 'Everything assigned to you, across all projects'}</p>
+          <span className="eyebrow">{person ? 'Across all projects' : 'Everything assigned to you'}</span>
+          <h1 className="display-sm">{person ? `${person.name}'s work` : 'My Work'}</h1>
         </div>
-      </div>
+      </header>
       <div className="toolbar">
         <div className="segmented">
           {FILTERS.map((f) => (
@@ -57,7 +57,7 @@ export default function MyWorkPage() {
         </div>
         {isFetching && !isLoading && <span className="muted small">Updating…</span>}
       </div>
-      <div className="card">
+      <div className="tile list-tile">
         {isLoading ? (
           <SkeletonRows rows={8} />
         ) : !data?.data.length ? (

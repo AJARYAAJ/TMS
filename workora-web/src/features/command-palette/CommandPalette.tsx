@@ -1,4 +1,4 @@
-import { BarChart3, Building2, FolderKanban, FolderPlus, Home, LayoutDashboard, ListTodo, Moon, Play, Plus, Search, Settings, Sun } from 'lucide-react';
+import { BarChart3, Building2, Clock, FileText, FolderKanban, FolderPlus, Inbox, LayoutDashboard, ListTodo, Map, Moon, Play, Plus, Search, Settings, Square, Sun, Target, Zap } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUiStore } from '@/app/ui.store';
@@ -8,6 +8,8 @@ import { useCan, useSession } from '@/features/auth/session.store';
 import { useProjects } from '@/features/projects/api';
 import { useSearch } from '@/features/search/api';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
+import { useRunningTimer, useTimer } from '@/features/tasks/api';
+import { useCreateDocument } from '@/features/docs/api';
 
 interface Command {
   id: string;
@@ -42,6 +44,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const { data: projects } = useProjects();
   const { data: results, isFetching } = useSearch(q);
   const currentProject = location.pathname.match(/^\/projects\/([^/]+)/)?.[1];
+  const openTaskKey = new URLSearchParams(location.search).get('task');
+  const { data: timer } = useRunningTimer();
+  const { start, stop } = useTimer();
+  const createDoc = useCreateDocument();
 
   const go = (path: string) => () => navigate(path);
   const commands = useMemo<Command[]>(() => {
@@ -52,8 +58,13 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     }
     list.push(
       { id: 'search-tasks', label: 'Search Tasks', hint: '/', icon: <Search size={16} />, group: 'Actions', run: () => setTimeout(() => document.querySelector<HTMLInputElement>('.global-search input')?.focus(), 0) },
-      { id: 'my-work', label: 'Open My Work', icon: <Home size={16} />, group: 'Navigate', run: go('/my-work') },
-      { id: 'dashboard', label: 'Open Dashboard', icon: <LayoutDashboard size={16} />, group: 'Navigate', run: go('/') },
+      { id: 'my-work', label: 'Open My Work', icon: <Zap size={16} />, group: 'Navigate', run: go('/my-work') },
+      { id: 'inbox', label: 'Open Inbox', icon: <Inbox size={16} />, group: 'Navigate', run: go('/inbox') },
+      { id: 'goals', label: 'Open Goals', icon: <Target size={16} />, group: 'Navigate', run: go('/goals') },
+      { id: 'docs', label: 'Open Docs', icon: <FileText size={16} />, group: 'Navigate', run: go('/docs') },
+      { id: 'roadmap', label: 'Open Roadmap', icon: <Map size={16} />, group: 'Navigate', run: go('/roadmap') },
+      { id: 'time', label: 'Open Timesheet', icon: <Clock size={16} />, group: 'Navigate', run: go('/time') },
+      { id: 'dashboard', label: 'Open Home', icon: <LayoutDashboard size={16} />, group: 'Navigate', run: go('/') },
       { id: 'projects', label: 'Open Projects', icon: <FolderKanban size={16} />, group: 'Navigate', run: go('/projects') },
       { id: 'reports', label: 'Open Reports', icon: <BarChart3 size={16} />, group: 'Navigate', run: go(currentProject ? `/projects/${currentProject}/reports` : '/reports') },
     );
@@ -66,6 +77,12 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         group: 'Actions',
         run: go(currentProject ? `/projects/${currentProject}/backlog` : '/projects'),
       });
+    }
+    if (canCreate) {
+      list.push({ id: 'new-doc', label: 'New Doc', icon: <FileText size={16} />, group: 'Actions', run: () => createDoc.mutate({ title: 'Untitled', projectId: currentProject }, { onSuccess: (d) => navigate(`/docs?doc=${d.id}`) }) });
+      if (timer) list.push({ id: 'stop-timer', label: `Stop timer on ${timer.task?.key}`, icon: <Square size={16} />, group: 'Actions', run: () => stop.mutate() });
+      else if (openTaskKey) list.push({ id: 'start-timer', label: `Start timer on ${openTaskKey}`, icon: <Play size={16} />, group: 'Actions', run: () => start.mutate(openTaskKey) });
+      if (currentProject) list.push({ id: 'automations', label: 'Project Automations', icon: <Zap size={16} />, group: 'Navigate', run: go(`/projects/${currentProject}/automations`) });
     }
     if (canAdmin) list.push({ id: 'admin', label: 'Open Administration', icon: <Settings size={16} />, group: 'Navigate', run: go('/admin') });
     list.push({
@@ -85,7 +102,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCreate, canAdmin, currentProject, projects, session, theme]);
+  }, [canCreate, canAdmin, currentProject, projects, session, theme, timer, openTaskKey]);
 
   const needle = q.trim().toLowerCase();
   const filtered = needle ? commands.filter((c) => `${c.label} ${c.hint ?? ''} ${c.keywords ?? ''}`.toLowerCase().includes(needle)) : commands.filter((c) => c.group !== 'Projects' || commands.indexOf(c) < 12);

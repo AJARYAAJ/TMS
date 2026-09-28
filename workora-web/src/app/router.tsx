@@ -22,9 +22,12 @@ const CalendarView = lazy(() => views().then((m) => ({ default: m.CalendarView }
 const TimelineView = lazy(() => views().then((m) => ({ default: m.TimelineView })));
 const BacklogView = lazy(() => views().then((m) => ({ default: m.BacklogView })));
 const SprintView = lazy(() => views().then((m) => ({ default: m.SprintView })));
-const placeholders = () => import('@/features/placeholders/Placeholders');
-const GoalsPage = lazy(() => placeholders().then((m) => ({ default: m.GoalsPage })));
-const DocumentsPage = lazy(() => placeholders().then((m) => ({ default: m.DocumentsPage })));
+const GoalsPage = lazy(() => import('@/features/goals/GoalsPage'));
+const DocsPage = lazy(() => import('@/features/docs/DocsPage'));
+const RoadmapPage = lazy(() => import('@/features/roadmap/RoadmapPage'));
+const TimePage = lazy(() => import('@/features/time/TimePage'));
+const InboxPage = lazy(() => import('@/features/inbox/InboxPage'));
+const AutomationsView = lazy(() => import('@/features/automations/AutomationsView'));
 
 export const router = createBrowserRouter(
   [
@@ -52,13 +55,20 @@ export const router = createBrowserRouter(
             { path: 'timeline', element: <TimelineView /> },
             { path: 'backlog', element: <BacklogView /> },
             { path: 'sprint', element: <SprintView /> },
+            { path: 'roadmap', element: <RoadmapPage /> },
             { path: 'goals', element: <GoalsPage /> },
-            { path: 'documents', element: <DocumentsPage /> },
+            { path: 'docs', element: <DocsPage /> },
+            { path: 'documents', element: <Navigate to="../docs" replace /> },
             { path: 'reports', element: <ReportsView /> },
+            { path: 'automations', element: <AutomationsView /> },
           ],
         },
         { path: 'teams', element: <TeamsPage /> },
+        { path: 'inbox', element: <InboxPage /> },
+        { path: 'roadmap', element: <RoadmapPage /> },
         { path: 'goals', element: <GoalsPage /> },
+        { path: 'docs', element: <DocsPage /> },
+        { path: 'time', element: <TimePage /> },
         { path: 'reports', element: <ReportsHub /> },
         { path: 'admin', element: <AdminPage /> },
         { path: '*', element: <Navigate to="/" replace /> },

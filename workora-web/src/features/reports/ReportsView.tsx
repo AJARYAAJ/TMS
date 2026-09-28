@@ -53,19 +53,19 @@ export default function ReportsView() {
       </div>
 
       <div className="dashboard-grid">
-        <section className="card">
+        <section className="tile">
           <h2>Tasks by status</h2>
           <BarList rows={TASK_STATUSES.map((s) => ({ label: STATUS_LABEL[s], value: data.byStatus[s] ?? 0 }))} unit="tasks" />
         </section>
-        <section className="card">
+        <section className="tile">
           <h2>Tasks by priority</h2>
           <BarList rows={TASK_PRIORITIES.map((p) => ({ label: PRIORITY_LABEL[p], value: data.byPriority[p] ?? 0 }))} unit="tasks" />
         </section>
-        <section className="card span-2">
+        <section className="tile span-2">
           <h2>Created vs completed · last 14 days</h2>
           <TrendChart trend={data.trend} />
         </section>
-        <section className="card">
+        <section className="tile">
           <h2>Open work by assignee</h2>
           {data.workload.length ? (
             <BarList rows={data.workload.map((w) => ({ label: w.name, value: w.open, note: w.openPoints ? `${w.openPoints} pts` : undefined }))} unit="open tasks" />
@@ -73,7 +73,7 @@ export default function ReportsView() {
             <p className="muted small">No assigned tasks.</p>
           )}
         </section>
-        <section className="card">
+        <section className="tile">
           <h2>Active sprint</h2>
           {data.activeSprint ? (
             <div className="sprint-summary">
@@ -240,13 +240,13 @@ export function ReportsHub() {
   const { data, isLoading } = useProjects();
   return (
     <div className="page">
-      <div className="page-header">
+      <header className="page-head">
         <div>
-          <h1>Reports</h1>
-          <p className="muted">Analytics per project</p>
+          <span className="eyebrow">Analytics per project</span>
+          <h1 className="display-sm">Reports</h1>
         </div>
-      </div>
-      <div className="card">
+      </header>
+      <div className="tile list-tile">
         {isLoading ? (
           <SkeletonRows rows={4} />
         ) : (

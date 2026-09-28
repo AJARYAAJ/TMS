@@ -1,4 +1,4 @@
-import { FolderKanban, MessageSquare, Search, User } from 'lucide-react';
+import { FileText, FolderKanban, MessageSquare, Search, User } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Spinner, StatusBadge } from '@/components/ui';
@@ -6,7 +6,7 @@ import { useOpenTask } from '@/features/tasks/useOpenTask';
 import { useHotkey } from '@/hooks/useHotkey';
 import { useSearch } from './api';
 
-type Hit = { kind: 'task' | 'project' | 'user' | 'comment'; id: string; go: () => void };
+type Hit = { kind: 'task' | 'project' | 'user' | 'comment' | 'doc'; id: string; go: () => void };
 
 export function GlobalSearch() {
   const [q, setQ] = useState('');
@@ -37,6 +37,7 @@ export function GlobalSearch() {
           ...data.projects.map((p) => ({ kind: 'project' as const, id: p.id, go: () => navigate(`/projects/${p.key}`) })),
           ...data.users.map((u) => ({ kind: 'user' as const, id: u.id, go: () => navigate(`/my-work?assignee=${u.id}`) })),
           ...data.comments.map((c) => ({ kind: 'comment' as const, id: c.id, go: () => openTask(c.taskKey) })),
+          ...(data.documents ?? []).map((d) => ({ kind: 'doc' as const, id: d.id, go: () => navigate(`/docs?doc=${d.id}`) })),
         ]
       : [];
   useEffect(() => setActive(0), [data]);
@@ -76,7 +77,7 @@ export function GlobalSearch() {
       <input
         ref={input}
         value={q}
-        placeholder="Search Workora…"
+        placeholder="Search tasks, docs, people…"
         aria-label="Search Workora"
         onChange={(e) => {
           setQ(e.target.value);
@@ -120,6 +121,16 @@ export function GlobalSearch() {
               <MessageSquare size={14} />
               <span className="task-key">{c.taskKey}</span>
               <span className="ellipsis muted">{c.snippet}</span>
+            </button>
+          ))}
+          {(data.documents ?? []).length > 0 && <div className="search-group">Docs</div>}
+          {(data.documents ?? []).map((d) => (
+            <button key={d.id} {...itemProps('doc', d.id)}>
+              <FileText size={14} />
+              <span>
+                {d.icon} {d.title}
+              </span>
+              <span className="ellipsis muted small">{d.snippet}</span>
             </button>
           ))}
         </div>

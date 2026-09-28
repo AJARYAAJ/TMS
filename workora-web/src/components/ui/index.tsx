@@ -117,3 +117,50 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
     </div>
   );
 }
+
+/** Circular progress ring (SVG). */
+export function Ring({ value, size = 56, stroke = 6, label }: { value: number; size?: number; stroke?: number; label?: ReactNode }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <span className="ring" style={{ width: size, height: size }} role="img" aria-label={`${Math.round(pct)}%`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle className="ring-track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} />
+        <circle className="ring-fill" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      </svg>
+      <span className="ring-label">{label ?? `${Math.round(pct)}%`}</span>
+    </span>
+  );
+}
+
+export function LabelChip({ label, onRemove }: { label: { name: string; color: string }; onRemove?: () => void }) {
+  return (
+    <span className="label-chip" style={{ ['--lc' as any]: label.color }}>
+      {label.name}
+      {onRemove && (
+        <button type="button" onClick={onRemove} aria-label={`Remove ${label.name}`}>
+          <X size={10} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+export function AvatarStack({ users, max = 4, size = 22 }: { users: Pick<UserSummary, 'id' | 'name'>[]; max?: number; size?: number }) {
+  return (
+    <span className="avatar-stack">
+      {users.slice(0, max).map((u) => (
+        <Avatar key={u.id} user={u} size={size} />
+      ))}
+      {users.length > max && <span className="avatar more" style={{ width: size, height: size, fontSize: size * 0.4 }}>+{users.length - max}</span>}
+    </span>
+  );
+}
+
+export const formatMinutes = (m: number | null | undefined) => {
+  if (!m) return '0m';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`;
+};

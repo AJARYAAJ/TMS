@@ -1,11 +1,11 @@
-import { ChevronLeft, ChevronRight, Play, Plus, Square } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Plus, Square, X } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar, EmptyState, PriorityIcon, ProgressBar, Skeleton, SkeletonRows, Spinner } from '@/components/ui';
 import { useCan } from '@/features/auth/session.store';
 import { BoardView } from '@/features/boards/BoardView';
 import { useCreateSprint, useSprintAction, useSprints } from '@/features/sprints/api';
-import { TaskFilters, useCreateTask, useTasks, useUpdateTask } from '@/features/tasks/api';
+import { TaskFilters, useBulkUpdate, useCreateTask, useLabels, useTasks, useUpdateTask } from '@/features/tasks/api';
 import { TaskRow } from '@/features/tasks/TaskRow';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
 import { errorMessage } from '@/services/api/client';
@@ -26,7 +26,7 @@ export function OverviewView() {
   return (
     <div className="page">
       <div className="dashboard-grid">
-        <section className="card">
+        <section className="tile">
           <h2>About</h2>
           <p className="prewrap">{project.description || <span className="muted">No description.</span>}</p>
           <div className="kv">
@@ -43,7 +43,7 @@ export function OverviewView() {
           </div>
           <ProgressBar value={done} max={project.taskCount} />
         </section>
-        <section className="card">
+        <section className="tile">
           <div className="card-header">
             <h2>Current sprint</h2>
             <Link to={`/projects/${project.key}/backlog`} className="small">
@@ -60,7 +60,7 @@ export function OverviewView() {
             </EmptyState>
           )}
         </section>
-        <section className="card span-2">
+        <section className="tile span-2">
           <h2>Recent activity</h2>
           {isLoading ? (
             <SkeletonRows rows={4} />
@@ -102,18 +102,33 @@ function SprintSummary({ sprint }: { sprint: Sprint }) {
 export function ListView() {
   const project = useProjectContext();
   const { data: users } = useUsers();
+  const { data: labels } = useLabels();
+  const { data: sprints } = useSprints(project.id);
   const [filters, setFilters] = useState<TaskFilters>({ sort: 'position', order: 'asc' });
   const [page, setPage] = useState(1);
   const { data, isLoading, isFetching } = useTasks({ ...filters, projectId: project.id, page, size: 100 });
   const canEdit = useCan('MEMBER');
+  const bulk = useBulkUpdate();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<number | null>(null);
+  const rows = data?.data ?? [];
   const set = (k: keyof TaskFilters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setPage(1);
+    setSelected(new Set());
     setFilters({ ...filters, [k]: e.target.value || undefined });
   };
+  const toggle = (i: number, on: boolean, shift: boolean) => {
+    const next = new Set(selected);
+    const range = shift && anchor !== null ? rows.slice(Math.min(anchor, i), Math.max(anchor, i) + 1) : [rows[i]];
+    range.forEach((t) => (on ? next.add(t.id) : next.delete(t.id)));
+    setSelected(next);
+    setAnchor(i);
+  };
+  const apply = (patch: Parameters<typeof bulk.mutate>[0]['patch']) => bulk.mutate({ ids: [...selected], patch, projectId: project.id }, { onSuccess: () => setSelected(new Set()) });
 
   return (
     <div className="page">
-      <div className="toolbar">
+      <div className="toolbar filters">
         <input className="filter-input" placeholder="Filter by title or key…" value={filters.q ?? ''} onChange={set('q')} aria-label="Filter tasks" />
         <select value={filters.status ?? ''} onChange={set('status')} aria-label="Status">
           <option value="">All statuses</option>
@@ -149,7 +164,22 @@ export function ListView() {
             </option>
           ))}
         </select>
-        <select value={`${filters.sort}:${filters.order}`} onChange={(e) => { const [sort, order] = e.target.value.split(':'); setFilters({ ...filters, sort, order: order as 'asc' | 'desc' }); }} aria-label="Sort">
+        <select value={filters.labelId ?? ''} onChange={set('labelId')} aria-label="Label">
+          <option value="">Any label</option>
+          {labels?.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={`${filters.sort}:${filters.order}`}
+          onChange={(e) => {
+            const [sort, order] = e.target.value.split(':');
+            setFilters({ ...filters, sort, order: order as 'asc' | 'desc' });
+          }}
+          aria-label="Sort"
+        >
           <option value="position:asc">Board order</option>
           <option value="priority:asc">Priority</option>
           <option value="dueDate:asc">Due date</option>
@@ -158,11 +188,23 @@ export function ListView() {
         </select>
         {isFetching && !isLoading && <Spinner size={12} />}
       </div>
-      <div className="card">
+      <div className="tile list-tile">
+        {canEdit && rows.length > 0 && (
+          <label className="select-all">
+            <input
+              type="checkbox"
+              checked={selected.size > 0 && selected.size === rows.length}
+              ref={(el) => el && (el.indeterminate = selected.size > 0 && selected.size < rows.length)}
+              onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((t) => t.id)) : new Set())}
+              aria-label="Select all"
+            />
+            <span className="muted small">{selected.size ? `${selected.size} selected` : `${data?.meta.total ?? 0} tasks`}</span>
+          </label>
+        )}
         {isLoading ? (
           <SkeletonRows rows={8} />
-        ) : data?.data.length ? (
-          data.data.map((t) => <TaskRow key={t.id} task={t} />)
+        ) : rows.length ? (
+          rows.map((t, i) => <TaskRow key={t.id} task={t} selected={selected.has(t.id)} onSelect={canEdit ? (on, shift) => toggle(i, on, shift) : undefined} />)
         ) : (
           <EmptyState title="No matching tasks">Try clearing some filters.</EmptyState>
         )}
@@ -178,6 +220,51 @@ export function ListView() {
           </span>
           <button className="btn btn-ghost btn-sm" disabled={page >= data.meta.totalPages} onClick={() => setPage(page + 1)}>
             Next
+          </button>
+        </div>
+      )}
+      {selected.size > 0 && (
+        <div className="bulk-bar" role="toolbar" aria-label="Bulk actions">
+          <strong>{selected.size} selected</strong>
+          <select value="" onChange={(e) => e.target.value && apply({ status: e.target.value as any })} aria-label="Set status">
+            <option value="">Status…</option>
+            {TASK_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+          <select value="" onChange={(e) => e.target.value && apply({ priority: e.target.value as any })} aria-label="Set priority">
+            <option value="">Priority…</option>
+            {TASK_PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {PRIORITY_LABEL[p]}
+              </option>
+            ))}
+          </select>
+          <select value="" onChange={(e) => e.target.value && apply({ assigneeId: e.target.value === 'none' ? null : e.target.value })} aria-label="Set assignee">
+            <option value="">Assignee…</option>
+            <option value="none">Unassigned</option>
+            {users?.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          <select value="" onChange={(e) => e.target.value && apply({ sprintId: e.target.value === 'backlog' ? null : e.target.value })} aria-label="Move to sprint">
+            <option value="">Sprint…</option>
+            <option value="backlog">Backlog</option>
+            {sprints
+              ?.filter((s) => s.status !== 'COMPLETED')
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+          {bulk.isPending && <Spinner size={12} />}
+          <button className="icon-btn" onClick={() => setSelected(new Set())} aria-label="Clear selection">
+            <X size={16} />
           </button>
         </div>
       )}
@@ -234,7 +321,7 @@ export function SprintView() {
   const daysLeft = active.endDate ? Math.ceil((new Date(`${active.endDate}T23:59:59`).getTime() - Date.now()) / 86_400_000) : null;
   return (
     <div className="page page-wide">
-      <div className="sprint-header card">
+      <div className="sprint-header tile">
         <div>
           <h2>{active.name}</h2>
           {active.goal && <p className="muted small">{active.goal}</p>}
@@ -288,7 +375,7 @@ export function BacklogView() {
   return (
     <div className="page">
       {open.map((s) => (
-        <section key={s.id} className="card backlog-section">
+        <section key={s.id} className="tile backlog-section">
           <div className="card-header">
             <div>
               <h2>
@@ -315,7 +402,7 @@ export function BacklogView() {
         </section>
       ))}
 
-      <section className="card backlog-section">
+      <section className="tile backlog-section">
         <div className="card-header">
           <div>
             <h2>Backlog</h2>

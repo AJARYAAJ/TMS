@@ -48,7 +48,14 @@ subscribers. Modules talk to each other through the event bus rather than callin
 | `realtime` | socket.io gateway + relay of domain events to rooms |
 | `jobs` | BullMQ queue + worker (project setup, email) |
 | `search` | PostgreSQL full-text search across tasks, projects, people, comments |
-| `reports` | dashboard and project analytics |
+| `reports` | dashboard (incl. completion heatmap) and project analytics |
+| `labels` | organization-wide labels |
+| `time` | timers and time entries, timesheets |
+| `goals` | goals/OKRs with key results and linked tasks |
+| `documents` | markdown docs with compare-and-swap versioning |
+| `automations` | rule engine subscribed to the event bus |
+| `integrations` | outgoing webhooks (own BullMQ queue, HMAC signatures, delivery log) |
+| `favorites`, `roadmap` | starred projects; epics across projects on a time axis |
 
 ### Request pipeline
 
@@ -79,9 +86,25 @@ columns' positions. That serializes concurrent drags within a project.
 
 ### Events
 
-`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_DELETED`, `COMMENT_CREATED`, `ATTACHMENT_ADDED`,
-`ATTACHMENT_DELETED`, `PROJECT_CREATED`, `PROJECT_UPDATED`, `SPRINT_CREATED`, `SPRINT_UPDATED`,
-`SPRINT_STARTED`, `SPRINT_COMPLETED`, `USER_ADDED`.
+`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_DELETED`, `TASK_LINKED`, `TASK_OVERDUE`,
+`COMMENT_CREATED`, `ATTACHMENT_ADDED`, `ATTACHMENT_DELETED`, `TIME_LOGGED`, `PROJECT_CREATED`, `PROJECT_UPDATED`,
+`SPRINT_CREATED`, `SPRINT_UPDATED`, `SPRINT_STARTED`, `SPRINT_COMPLETED`, `DOCUMENT_CREATED`, `DOCUMENT_UPDATED`,
+`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`.
+
+### Automations
+
+`AutomationsService` subscribes to the event bus. For each event it maps the event to triggers
+(`STATUS_CHANGED{from,to}`, `PRIORITY_CHANGED`, `TASK_CREATED`, `ASSIGNED`, `COMMENT_ADDED`,
+`TASK_OVERDUE`), loads the project's enabled rules, checks conditions (type, priority, label) and runs
+the actions **through the normal services** as the rule's author. Because those changes flow through the
+same services, they are validated, audited, broadcast and delivered to webhooks like any other change.
+The acting principal carries `automation: <ruleId>`. Events from rule-made changes carry
+`actor.automation` and are ignored by the engine, so rules can never trigger each other in a loop.
+
+### Recurring jobs
+
+`JobScheduler` registers a BullMQ job scheduler (`tasks.overdue-scan`, every 15 min). It marks newly overdue
+tasks (`overdue_notified_at`) and publishes `TASK_OVERDUE` once per task. The marker resets when the due date changes.
 
 ```ts
 interface DomainEvent<T> {

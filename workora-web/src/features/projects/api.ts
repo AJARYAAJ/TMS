@@ -48,3 +48,16 @@ export function useProjectActivity(projectId: string | undefined) {
 export function useUsers() {
   return useQuery({ queryKey: qk.users, queryFn: () => api.get<(UserSummary & { role: Role })[]>('/users'), staleTime: 5 * 60_000 });
 }
+
+/** Star / unstar a project (optimistic). */
+export function useToggleFavorite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) => (on ? api.post(`/projects/${id}/favorite`) : api.delete(`/projects/${id}/favorite`)),
+    onMutate: ({ id, on }) => {
+      qc.setQueryData<Project[]>(qk.projects, (l) => l?.map((p) => (p.id === id ? { ...p, isFavorite: on } : p)));
+      qc.setQueriesData<Project>({ queryKey: ['project'] }, (p) => (p && p.id === id ? { ...p, isFavorite: on } : p));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: qk.projects }),
+  });
+}

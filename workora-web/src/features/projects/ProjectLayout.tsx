@@ -1,34 +1,37 @@
-import { Plus } from 'lucide-react';
+import { BarChart3, CalendarDays, FileText, GanttChart, Kanban, LayoutGrid, List, ListTodo, Map, Plus, Rocket, Star, Target, Zap } from 'lucide-react';
 import { Suspense } from 'react';
 import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import { PageSkeleton } from '@/app/layouts/AppShell';
 import { useUiStore } from '@/app/ui.store';
-import { EmptyState, Skeleton } from '@/components/ui';
+import { EmptyState, Ring, Skeleton } from '@/components/ui';
 import { useCan } from '@/features/auth/session.store';
 import { ApiError } from '@/services/api/client';
 import { useWatchProject } from '@/services/websocket/useRealtime';
 import type { Project } from '@/types';
-import { useProject } from './api';
+import { useProject, useToggleFavorite } from './api';
 
 const VIEWS = [
-  ['', 'Overview'],
-  ['list', 'List'],
-  ['board', 'Board'],
-  ['calendar', 'Calendar'],
-  ['timeline', 'Timeline'],
-  ['backlog', 'Backlog'],
-  ['sprint', 'Sprint'],
-  ['goals', 'Goals'],
-  ['documents', 'Documents'],
-  ['reports', 'Reports'],
+  ['', 'Overview', LayoutGrid],
+  ['list', 'List', List],
+  ['board', 'Board', Kanban],
+  ['backlog', 'Backlog', ListTodo],
+  ['sprint', 'Sprint', Rocket],
+  ['calendar', 'Calendar', CalendarDays],
+  ['timeline', 'Timeline', GanttChart],
+  ['roadmap', 'Roadmap', Map],
+  ['goals', 'Goals', Target],
+  ['docs', 'Docs', FileText],
+  ['reports', 'Reports', BarChart3],
+  ['automations', 'Automations', Zap],
 ] as const;
 
-/** Project workspace: header + view tabs. Switching views is client-side routing only. */
+/** Project workspace: hero header + view switcher. Switching views is client-side routing only. */
 export default function ProjectLayout() {
   const { projectKey } = useParams();
   const { data: project, error, isLoading } = useProject(projectKey);
   const canCreate = useCan('MEMBER');
   const openCreateTask = useUiStore((s) => s.openCreateTask);
+  const favorite = useToggleFavorite();
   useWatchProject(project?.id);
 
   if (error && !project) {
@@ -38,36 +41,51 @@ export default function ProjectLayout() {
       </div>
     );
   }
+  const done = project ? project.taskCount - project.openTaskCount : 0;
 
   return (
     <div className="project-workspace">
-      <div className="project-header">
-        <div className="project-title">
+      <header className="project-hero" style={{ ['--app' as any]: project?.color ?? 'var(--ink-3)' }}>
+        <div className="project-hero-main">
           {project ? (
             <>
-              <span className="project-badge" style={{ background: project.color }}>
-                {project.key.slice(0, 2)}
+              <span className="project-mark">{project.key.slice(0, 2)}</span>
+              <div className="project-hero-text">
+                <span className="eyebrow">
+                  {project.key} · {project.openTaskCount} open · {done} done
+                </span>
+                <h1 className="display-sm">{project.name}</h1>
+              </div>
+              <button
+                className={`star${project.isFavorite ? ' on' : ''}`}
+                onClick={() => favorite.mutate({ id: project.id, on: !project.isFavorite })}
+                aria-label={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-pressed={project.isFavorite}
+                title={project.isFavorite ? 'Pinned to your dock' : 'Pin to your dock'}
+              >
+                <Star size={18} fill={project.isFavorite ? 'currentColor' : 'none'} />
+              </button>
+              <span className="ml-auto project-hero-ring">
+                <Ring value={project.taskCount ? (done / project.taskCount) * 100 : 0} size={54} />
               </span>
-              <h1>{project.name}</h1>
-              <span className="muted small">{project.key}</span>
+              {canCreate && (
+                <button className="btn btn-ink" onClick={() => openCreateTask({ projectId: project.id })}>
+                  <Plus size={15} /> Task
+                </button>
+              )}
             </>
           ) : (
-            <Skeleton width={260} height={28} />
-          )}
-          {canCreate && project && (
-            <button className="btn btn-ghost btn-sm ml-auto" onClick={() => openCreateTask({ projectId: project.id })}>
-              <Plus size={14} /> Add task
-            </button>
+            <Skeleton width={320} height={40} />
           )}
         </div>
-        <nav className="view-tabs">
-          {VIEWS.map(([path, label]) => (
+        <nav className="view-switch" aria-label="Project views">
+          {VIEWS.map(([path, label, Icon]) => (
             <NavLink key={path} to={path ? `/projects/${projectKey}/${path}` : `/projects/${projectKey}`} end className={({ isActive }) => (isActive ? 'active' : '')}>
-              {label}
+              <Icon size={14} /> <span>{label}</span>
             </NavLink>
           ))}
         </nav>
-      </div>
+      </header>
       <div className="project-content">
         {isLoading && !project ? (
           <PageSkeleton />

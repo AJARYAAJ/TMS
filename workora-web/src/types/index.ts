@@ -39,6 +39,7 @@ export interface Project {
   owner: UserSummary | null;
   taskCount: number;
   openTaskCount: number;
+  isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -61,9 +62,132 @@ export interface Task {
   startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
+  parentId: string | null;
+  parent: { id: string; key: string; title: string; type: TaskType } | null;
+  estimateMinutes: number | null;
+  labels: Label[];
+  subtaskCount: number;
+  subtaskDone: number;
+  blockedBy: number;
+  loggedMinutes: number;
+  commentCount: number;
   createdAt: string;
   updatedAt: string;
   version: number;
+}
+
+export interface TaskLinkItem {
+  id: string;
+  type: 'BLOCKS' | 'RELATES' | 'DUPLICATES';
+  relation: string;
+  direction: 'outgoing' | 'incoming';
+  task: { id: string; key: string; title: string; status: TaskStatus; projectId: string };
+}
+
+export interface TaskDetail extends Task {
+  watchers?: UserSummary[];
+  links?: TaskLinkItem[];
+}
+
+export interface Label {
+  id: string;
+  name: string;
+  color: string;
+  usage?: number;
+}
+
+export interface TimeEntry {
+  id: string;
+  taskId: string;
+  task?: { id: string; key: string; title: string; projectId: string };
+  user: UserSummary;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number | null;
+  running: boolean;
+  note: string;
+}
+
+export type GoalStatus = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'ACHIEVED';
+export interface KeyResult {
+  id: string;
+  title: string;
+  kind: 'NUMBER' | 'TASKS';
+  startValue: number;
+  targetValue: number;
+  currentValue: number;
+  unit: string;
+  progress: number;
+}
+export interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  status: GoalStatus;
+  dueDate: string | null;
+  owner: UserSummary;
+  project: { id: string; key: string; name: string; color: string } | null;
+  progress: number;
+  keyResults: KeyResult[];
+  tasks: { id: string; key: string; title: string; status: TaskStatus }[];
+  taskCount: number;
+  tasksDone: number;
+  updatedAt: string;
+}
+
+export interface DocumentSummary {
+  id: string;
+  title: string;
+  icon: string;
+  projectId: string | null;
+  author: UserSummary;
+  updatedBy: UserSummary;
+  version: number;
+  excerpt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface Document extends DocumentSummary {
+  content: string;
+}
+
+export interface Automation {
+  id: string;
+  projectId: string;
+  name: string;
+  enabled: boolean;
+  trigger: { event: string; from?: string; to?: string };
+  conditions: { type?: string; priority?: string; labelId?: string };
+  actions: ({ type: string } & Record<string, any>)[];
+  runCount: number;
+  lastRunAt: string | null;
+}
+
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  secret?: string;
+  lastDelivery: { success: boolean; statusCode: number | null; at: string } | null;
+}
+
+export interface RoadmapItem {
+  id: string;
+  key: string;
+  title: string;
+  status: TaskStatus;
+  projectId: string;
+  projectName: string;
+  projectColor: string;
+  startDate: string | null;
+  dueDate: string | null;
+  childCount: number;
+  childDone: number;
+  points: number;
+  progress: number;
+  assignee: { id: string; name: string } | null;
 }
 
 export interface Board {
@@ -147,6 +271,7 @@ export interface SearchResults {
   projects: { id: string; key: string; name: string; color: string }[];
   users: (UserSummary & { role: Role })[];
   comments: { id: string; taskId: string; taskKey: string; projectId: string; snippet: string }[];
+  documents: { id: string; title: string; icon: string; projectId: string | null; snippet: string }[];
 }
 
 export interface RealtimeEvent<T = any> {
