@@ -27,12 +27,13 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
       if (d.changes.status) {
         return { summary: `moved ${d.task.key} from ${label(d.changes.status.from)} to ${label(d.changes.status.to)}`, taskId: d.task.id };
       }
-      return { summary: `updated ${fields.map((f) => label(f.replace(/Id$/, ''))).join(', ')} on ${d.task.key}`, taskId: d.task.id };
+      const names = fields.flatMap((f) => (f === 'customFields' ? Object.keys(d.changes.customFields.to) : [label(f.replace(/Id$/, ''))]));
+      return { summary: `updated ${names.join(', ')} on ${d.task.key}`, taskId: d.task.id };
     }
     case 'TASK_ASSIGNED':
       return { summary: `assigned ${d.task.key} to ${d.task.assignee?.name ?? 'nobody'}`, taskId: d.task.id };
     case 'TASK_DELETED':
-      return { summary: `deleted ${d.task.key} “${d.task.title}”` };
+      return { summary: `${d.trashed ? 'moved' : 'deleted'} ${d.task.key} “${d.task.title}”${d.trashed ? ' to the trash' : ''}` };
     case 'COMMENT_CREATED':
       return { summary: `commented on ${d.task.key}`, taskId: d.task.id };
     case 'ATTACHMENT_ADDED':
@@ -72,6 +73,10 @@ export function describe(e: DomainEvent): { summary: string; taskId?: string } |
       return { summary: `updated the workflow (${d.states.map((st: { name: string }) => st.name).join(' → ')})` };
     case 'TASK_RECURRED':
       return { summary: `completed ${d.task.key}; next occurrence ${d.next.key} is due ${d.next.dueDate ?? 'soon'} (${d.rule})`, taskId: d.next.id };
+    case 'TASKS_IMPORTED':
+      return d.count ? { summary: `imported ${d.count} task${d.count === 1 ? '' : 's'}${d.count > 1 ? ` (${d.first} – ${d.last})` : ` (${d.first})`}` } : null;
+    case 'TASK_RESTORED':
+      return { summary: `restored ${d.task.key} “${d.task.title}” from the trash`, taskId: d.task.id };
     case 'AUTOMATION_RAN':
       return d.actions.length ? { summary: `ran on ${d.task.key} (${d.actions.map((a: string) => label(a)).join(', ')})`, taskId: d.task.id } : null;
     default:

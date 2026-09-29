@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { toStateDto } from '../workflow/workflow-state.entity';
 import { toLabelDto } from '../labels/label.entity';
 import { TaskLinkType } from './task-link.entity';
@@ -32,6 +32,8 @@ export class CreateTaskDto {
   @IsOptional() @IsUUID() parentId?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
+  /** Custom field values: `{ "<fieldId or name>": value }`; `null` clears a value. */
+  @IsOptional() @IsObject() customFields?: Record<string, unknown>;
 }
 
 /** PATCH semantics: omitted fields are left unchanged; `null` clears a nullable field. */
@@ -52,6 +54,8 @@ export class UpdateTaskDto {
   @IsOptional() @IsUUID() parentId?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(100000) estimateMinutes?: number | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
+  /** Custom field values: `{ "<fieldId or name>": value }`; `null` clears a value. */
+  @IsOptional() @IsObject() customFields?: Record<string, unknown>;
 }
 
 export class MoveTaskDto {
@@ -81,6 +85,8 @@ export class ListTasksQuery {
   @IsOptional() @IsDateString() dueFrom?: string;
   @IsOptional() @IsDateString() dueTo?: string;
   @IsOptional() @IsIn(['true', 'false']) open?: 'true' | 'false';
+  /** Custom field filter as JSON: `{"<fieldId>": value}` (select: option id; multi-select: contains; checkbox: true/false). */
+  @IsOptional() @IsString() @MaxLength(2000) cf?: string;
   @IsOptional() @IsIn(['position', 'createdAt', 'updatedAt', 'dueDate', 'priority']) sort?: string;
   @IsOptional() @IsIn(['asc', 'desc']) order?: 'asc' | 'desc';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
@@ -141,6 +147,7 @@ export function toTaskDto(t: Task, stats: TaskStats = EMPTY_STATS) {
     parent: t.parent ? { id: t.parent.id, key: t.parent.key, title: t.parent.title, type: t.parent.type } : null,
     estimateMinutes: t.estimateMinutes,
     labels: (t.labels ?? []).map(toLabelDto).sort((a, b) => a.name.localeCompare(b.name)),
+    customFields: t.customValues ?? {},
     ...stats,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,

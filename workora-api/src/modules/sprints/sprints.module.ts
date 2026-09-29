@@ -111,6 +111,15 @@ export class SprintsService {
     const { sprint, movedToBacklog } = await this.dataSource.transaction(async (m) => {
       const sprint = await this.find(principal.organizationId, id, m.getRepository(Sprint));
       if (sprint.status !== SprintStatus.ACTIVE) throw ApiException.badRequest('SPRINT_NOT_ACTIVE', 'Only active sprints can be completed');
+      const [stats] = await m.query(
+        `SELECT COALESCE(SUM(story_points), 0)::int AS "committedPoints",
+                COALESCE(SUM(story_points) FILTER (WHERE status = 'DONE'), 0)::int AS "completedPoints",
+                COUNT(*)::int AS "committedCount",
+                COUNT(*) FILTER (WHERE status = 'DONE')::int AS "completedCount"
+           FROM tasks WHERE sprint_id = $1`,
+        [sprint.id],
+      );
+      sprint.completionStats = stats;
       const result = await m.update(Task, { sprintId: sprint.id, status: Not(TaskStatus.DONE) }, { sprintId: null });
       sprint.status = SprintStatus.COMPLETED;
       sprint.completedAt = new Date();

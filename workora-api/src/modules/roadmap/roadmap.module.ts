@@ -31,7 +31,7 @@ export class RoadmapController {
          LEFT JOIN tasks c ON c.parent_id = e.id
          LEFT JOIN users a ON a.id = e.assignee_id
         WHERE e.organization_id = $1 AND e.type = 'EPIC' AND ($2::uuid IS NULL OR e.project_id = $2)
-        GROUP BY e.id, p.id, a.id
+        GROUP BY e.id, e.key, e.title, e.status, e.project_id, e.number, e.start_date, e.due_date, p.id, a.id
         ORDER BY "startDate" NULLS LAST, e.number`,
       [u.organizationId, project?.id ?? null],
     );

@@ -4,6 +4,7 @@ export const JobNames = {
   PROJECT_SETUP: 'project.setup',
   NOTIFICATION_EMAIL: 'notification.email',
   OVERDUE_SCAN: 'tasks.overdue-scan',
+  TRASH_PURGE: 'tasks.trash-purge',
 } as const;
 
 export interface ProjectSetupJob {

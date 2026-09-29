@@ -21,6 +21,8 @@ export class JobScheduler implements OnApplicationBootstrap {
   /** Recurring job: remind assignees about overdue work every 15 minutes. */
   async onApplicationBootstrap() {
     await this.queue.upsertJobScheduler('overdue-scan', { every: 15 * 60_000 }, { name: JobNames.OVERDUE_SCAN, opts: { removeOnComplete: 50, removeOnFail: 50 } });
+    // Trash retention: tasks stay restorable for 30 days.
+    await this.queue.upsertJobScheduler('trash-purge', { every: 6 * 60 * 60_000 }, { name: JobNames.TRASH_PURGE, opts: { removeOnComplete: 20, removeOnFail: 20 } });
   }
 
   @OnEvent(DOMAIN_EVENT, { async: true })
@@ -62,6 +64,8 @@ export class JobsProcessor extends WorkerHost {
         return this.email.deliver(job.data as NotificationEmailJob, job.attemptsMade + 1, job.opts.attempts ?? 1);
       case JobNames.OVERDUE_SCAN:
         return this.scanOverdue();
+      case JobNames.TRASH_PURGE:
+        return this.purgeTrash();
       default:
         this.logger.warn(`Unknown job ${job.name}`);
     }
@@ -85,6 +89,12 @@ export class JobsProcessor extends WorkerHost {
       this.events.publish('TASK_OVERDUE', { organizationId: t.organizationId, projectId: t.projectId, actor: null, data: { task } });
     }
     return { overdue: ids.length };
+  }
+
+  /** Permanently removes tasks that have been in the trash for more than 30 days. */
+  async purgeTrash() {
+    const [, purged] = await this.dataSource.query(`DELETE FROM tasks_all WHERE deleted_at < now() - interval '30 days'`);
+    return { purged };
   }
 
   /** Default project scaffolding: the first sprint (board columns come from the default workflow). */

@@ -6,6 +6,7 @@ import { EventBus } from '../../common/events/event-bus.service';
 import { ApiResult, paginated } from '../../common/http/api-response';
 import { ApiException } from '../../common/http/api-exception';
 import { isUuid } from '../../common/http/identifiers';
+import { applyFieldValues } from '../fields/field-values';
 import { Label } from '../labels/label.entity';
 import { Membership } from '../organizations/membership.entity';
 import { findProject } from '../projects/projects.service';
@@ -160,6 +161,24 @@ export class TasksService {
     if (q.open === 'false') qb.andWhere('t.status = :done', { done: TaskStatus.DONE });
     if (q.dueFrom) qb.andWhere('t.dueDate >= :dueFrom', { dueFrom: q.dueFrom });
     if (q.dueTo) qb.andWhere('t.dueDate <= :dueTo', { dueTo: q.dueTo });
+    if (q.cf) {
+      let filters: Record<string, unknown>;
+      try {
+        filters = JSON.parse(q.cf);
+      } catch {
+        throw ApiException.badRequest('VALIDATION_ERROR', 'cf must be a JSON object');
+      }
+      if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw ApiException.badRequest('VALIDATION_ERROR', 'cf must be a JSON object');
+      Object.entries(filters).forEach(([fieldId, value], i) => {
+        if (!isUuid(fieldId)) throw ApiException.badRequest('VALIDATION_ERROR', 'cf keys must be custom field ids');
+        const k = `cfk${i}`;
+        const v = `cfv${i}`;
+        if (value === null) qb.andWhere(`NOT (t.custom_values ? :${k})`, { [k]: fieldId });
+        else if (value === false) qb.andWhere(`COALESCE(t.custom_values -> :${k}, 'false'::jsonb) = 'false'::jsonb`, { [k]: fieldId });
+        // jsonb containment: equal scalars match, and arrays (multi-select) match when they contain the value.
+        else qb.andWhere(`(t.custom_values -> :${k}) @> CAST(:${v} AS jsonb)`, { [k]: fieldId, [v]: JSON.stringify(value) });
+      });
+    }
     if (q.q) {
       qb.andWhere(new Brackets((b) => b.where('t.title ILIKE :like', { like: `%${escapeLike(q.q!)}%` }).orWhere('t.key ILIKE :like')));
     }
@@ -235,7 +254,9 @@ export class TasksService {
       const state = dto.stateId || dto.status ? await resolveState(m, project.id, { stateId: dto.stateId, status: dto.status }) : await defaultState(m, project.id);
       const status = state.category;
       const position = await m.count(Task, { where: { projectId: project.id, stateId: state.id } });
+      const { values: customValues } = await applyFieldValues(m, principal.organizationId, project.id, {}, dto.customFields ?? {});
       const entity = m.create(Task, {
+        customValues: customValues as Task['customValues'],
         organizationId: principal.organizationId,
         projectId: project.id,
         number,
@@ -290,6 +311,14 @@ export class TasksService {
       // Drop loaded relations whose FK column changed so TypeORM persists the new id.
       if ('assigneeId' in changes) (task as any).assignee = undefined;
       if ('parentId' in changes) (task as any).parent = undefined;
+
+      if (dto.customFields) {
+        const { values, changed } = await applyFieldValues(m, principal.organizationId, task.projectId, task.customValues ?? {}, dto.customFields);
+        if (changed) {
+          changes.customFields = changed;
+          task.customValues = values as Task['customValues'];
+        }
+      }
 
       if (dto.labelIds) {
         const next = await this.loadLabels(m, principal.organizationId, dto.labelIds);
@@ -388,21 +417,88 @@ export class TasksService {
     return dto$;
   }
 
+  /** Moves a task (and its subtasks) to the trash. Trashed tasks disappear everywhere but can be restored. */
   async remove(principal: AuthPrincipal, idOrKey: string) {
-    const task = await this.dataSource.transaction(async (m) => {
+    const { task, count } = await this.dataSource.transaction(async (m) => {
       const task = await findTask(m, principal.organizationId, idOrKey);
       await lockProject(m, task.projectId);
-      await m.delete(Task, { id: task.id });
-      await reorderColumn(m, task.projectId, task.stateId);
-      return task;
+      const [rows]: [{ id: string; state_id: string }[], number] = await m.query(
+        `WITH RECURSIVE tree(id) AS (SELECT $1::uuid UNION SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id)
+         UPDATE tasks_all SET deleted_at = now(), deleted_by_id = $2 WHERE id IN (SELECT id FROM tree) RETURNING id, state_id`,
+        [task.id, principal.userId],
+      );
+      for (const stateId of new Set(rows.map((r) => r.state_id))) await reorderColumn(m, task.projectId, stateId);
+      return { task, count: rows.length };
     });
     this.events.publish('TASK_DELETED', {
       organizationId: principal.organizationId,
       projectId: task.projectId,
       actor: actorOf(principal),
-      data: { task: toTaskDto(task) },
+      data: { task: toTaskDto(task), trashed: true, count },
     });
-    return { id: task.id, key: task.key, deleted: true };
+    return { id: task.id, key: task.key, deleted: true, trashed: true, count };
+  }
+
+  /* ─────────── Trash ─────────── */
+
+  /** Trashed tasks, newest first. Subtasks trashed together with their parent are folded into it. */
+  async trash(orgId: string, projectIdOrKey?: string) {
+    const project = projectIdOrKey ? await findProject(this.dataSource.manager, orgId, projectIdOrKey) : null;
+    return this.dataSource.query(
+      `SELECT t.id, t.key, t.title, t.type, t.status, t.project_id AS "projectId", p.key AS "projectKey", p.name AS "projectName",
+              t.deleted_at AS "deletedAt", json_build_object('id', u.id, 'name', u.name) AS "deletedBy",
+              (SELECT COUNT(*) FROM tasks_all c WHERE c.parent_id = t.id AND c.deleted_at = t.deleted_at)::int AS "subtaskCount",
+              (t.deleted_at + interval '30 days') AS "purgeAt"
+         FROM tasks_all t
+         JOIN projects p ON p.id = t.project_id
+         LEFT JOIN users u ON u.id = t.deleted_by_id
+        WHERE t.organization_id = $1 AND t.deleted_at IS NOT NULL AND ($2::uuid IS NULL OR t.project_id = $2)
+          AND NOT EXISTS (SELECT 1 FROM tasks_all par WHERE par.id = t.parent_id AND par.deleted_at = t.deleted_at)
+        ORDER BY t.deleted_at DESC, t.number
+        LIMIT 200`,
+      [orgId, project?.id ?? null],
+    );
+  }
+
+  /** Restores a trashed task together with the subtasks that were trashed with it. */
+  async restore(principal: AuthPrincipal, id: string) {
+    const task = await this.dataSource.transaction(async (m) => {
+      const [row] = await m.query(`SELECT id, project_id, parent_id, deleted_at FROM tasks_all WHERE id = $1 AND organization_id = $2 AND deleted_at IS NOT NULL`, [id, principal.organizationId]);
+      if (!row) throw ApiException.notFound('task', 'That task is not in the trash');
+      await lockProject(m, row.project_id);
+      const batch: { id: string }[] = await m.query(
+        // Compared in SQL: timestamps are microsecond-precise in Postgres but only millisecond-precise in JS.
+        `WITH RECURSIVE tree(id) AS (
+           SELECT $1::uuid
+           UNION SELECT c.id FROM tasks_all c JOIN tree ON c.parent_id = tree.id WHERE c.deleted_at = (SELECT deleted_at FROM tasks_all WHERE id = $1)
+         ) SELECT id FROM tree`,
+        [row.id],
+      );
+      const ids = batch.map((b) => b.id);
+      // A parent that is still in the trash can't hold the restored task; it comes back top-level.
+      await m.query(`UPDATE tasks_all SET parent_id = NULL WHERE id = $1 AND parent_id IN (SELECT id FROM tasks_all WHERE deleted_at IS NOT NULL)`, [row.id]);
+      await m.query(`UPDATE tasks_all SET sprint_id = NULL WHERE id = ANY($1) AND sprint_id IN (SELECT id FROM sprints WHERE status = 'COMPLETED')`, [ids]);
+      const [restored]: [{ state_id: string }[], number] = await m.query(`UPDATE tasks_all SET deleted_at = NULL, deleted_by_id = NULL WHERE id = ANY($1) RETURNING state_id`, [ids]);
+      for (const stateId of new Set(restored.map((r) => r.state_id))) await reorderColumn(m, row.project_id, stateId);
+      return findTask(m, principal.organizationId, row.id);
+    });
+    const dto$ = await taskDto(this.dataSource.manager, task);
+    this.events.publish('TASK_RESTORED', { organizationId: principal.organizationId, projectId: task.projectId, actor: actorOf(principal), data: { task: dto$ } });
+    return dto$;
+  }
+
+  /** Permanently deletes a trashed task and its trashed subtasks (comments, time and files go too). */
+  async purge(principal: AuthPrincipal, id: string) {
+    const [row] = await this.dataSource.query(`SELECT id, key, deleted_at FROM tasks_all WHERE id = $1 AND organization_id = $2 AND deleted_at IS NOT NULL`, [id, principal.organizationId]);
+    if (!row) throw ApiException.notFound('task', 'That task is not in the trash');
+    const [, count] = await this.dataSource.query(
+      `WITH RECURSIVE tree(id) AS (
+         SELECT $1::uuid
+         UNION SELECT c.id FROM tasks_all c JOIN tree ON c.parent_id = tree.id WHERE c.deleted_at = (SELECT deleted_at FROM tasks_all WHERE id = $1)
+       ) DELETE FROM tasks_all WHERE id IN (SELECT id FROM tree)`,
+      [row.id],
+    );
+    return { id: row.id, key: row.key, purged: true, count };
   }
 
   /* ─────────── Watchers ─────────── */
@@ -437,7 +533,8 @@ export class TasksService {
       relations: { source: true, target: true },
       order: { createdAt: 'ASC' },
     });
-    return rows.map((l) => {
+    // A linked task in the trash is loaded as null (tasks is a view of live rows); hide that link until it is restored.
+    return rows.filter((l) => l.source && l.target).map((l) => {
       const outgoing = l.sourceTaskId === taskId;
       const other = outgoing ? l.target : l.source;
       return {

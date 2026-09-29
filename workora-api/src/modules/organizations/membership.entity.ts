@@ -10,6 +10,8 @@ export class Membership {
   @Column('uuid') organizationId: string;
   @Column('uuid') userId: string;
   @Column({ type: 'varchar' }) role: Role;
+  /** Hours a member can take on per week (Workload view), in minutes. */
+  @Column({ type: 'int', default: 2400 }) weeklyCapacityMinutes: number;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' }) @JoinColumn({ name: 'user_id' }) user: User;

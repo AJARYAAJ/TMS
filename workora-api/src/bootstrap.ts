@@ -14,6 +14,8 @@ export async function configureApp(app: INestApplication, config: AppConfig) {
   express.use('/api/v1/storage', raw({ type: () => true, limit: config.maxUploadBytes }));
   // Slack/GitHub sign the exact bytes they send, so inbound hooks keep the raw body.
   express.use('/api/v1/hooks', raw({ type: () => true, limit: '5mb' }));
+  // CSV imports send the file contents as JSON.
+  express.use(/^\/api\/v1\/projects\/[^/]+\/import$/, json({ limit: '5mb' }));
   express.use(json({ limit: '1mb' }));
   express.use(urlencoded({ extended: true, limit: '1mb' }));
 

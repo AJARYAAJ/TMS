@@ -17,5 +17,14 @@ export class Sprint {
   @Column({ type: 'date', nullable: true }) startDate: string | null;
   @Column({ type: 'date', nullable: true }) endDate: string | null;
   @Column({ type: 'timestamptz', nullable: true }) completedAt: Date | null;
+  /** Snapshot taken on completion (velocity): what was committed vs. done. */
+  @Column({ type: 'jsonb', nullable: true }) completionStats: SprintCompletionStats | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+}
+
+export interface SprintCompletionStats {
+  committedPoints: number;
+  completedPoints: number;
+  committedCount: number;
+  completedCount: number;
 }
