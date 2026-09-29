@@ -16,7 +16,7 @@ docs/          Architecture notes
 Requirements: Node 20+, PostgreSQL 14+, Redis 6+ (or Docker).
 
 ```bash
-docker compose up -d                      # PostgreSQL + Redis
+docker compose up -d                      # PostgreSQL + Redis + Mailpit (dev inbox: http://localhost:8025)
 
 cd workora-api
 cp .env.example .env                      # optional; defaults match docker-compose
@@ -53,7 +53,8 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 | **Slack** | Channel notifications through an Incoming Webhook (Block Kit messages; pick events and an optional project) and a signed `/workora` slash command: `create [KEY:] title`, look up `ECOM-12`, search, help |
 | **GitHub** | Repository webhook (HMAC-verified) links PRs, commits, branches and issues that mention a task key; PR opened/merged moves the task forward through the workflow, `fixes ECOM-12` on the default branch closes it, new issues can become tasks. Task sheets show a *Development* panel with copyable branch names; cards show open-PR badges |
 | **Webhooks** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
-| **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live), Inbox page, email queue |
+| **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live) and Inbox page |
+| **Email** | SMTP delivery (any provider, TLS/STARTTLS, auth, pooled) of branded HTML + plain-text emails via a retrying job queue; per-user preferences for 8 kinds of email; signed one-click unsubscribe (RFC 8058 `List-Unsubscribe`); admin status page with test send and delivery log |
 | **Workspace** | Multi-tenant organizations, RBAC (Owner › Admin › Member › Viewer), teams, labels, favourites pinned to the dock |
 
 **Platform**
@@ -91,8 +92,26 @@ Admins manage both under **Admin → Integrations**.
 
 The demo seed connects `acme/storefront` with an open PR and commits linked to ECOM-3.
 
+### Email notifications
+
+Set SMTP on the API and restart it, either as a URL or as discrete variables:
+
+```bash
+SMTP_URL=smtp://apikey:secret@smtp.sendgrid.net:587     # smtps://…:465 for implicit TLS
+MAIL_FROM="Workora <no-reply@yourcompany.com>"
+APP_URL=https://workora.yourcompany.com/workora          # links in emails
+# or SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_SECURE / SMTP_REQUIRE_TLS
+```
+
+Without SMTP settings, emails are rendered and logged but not sent. Admins can check the configuration
+and send a test email under **Admin → Email**. Each person picks which emails they get under
+**Settings** (user menu → Notification settings). By default they get assignments, @mentions, overdue
+reminders, automation alerts and workspace invites. Comments, status changes and sprint emails are off
+until the person turns them on. Every email carries a signed unsubscribe link, and a `List-Unsubscribe`
+header so mail clients can show a one-click *Unsubscribe* button.
+
 Not yet built: OAuth "Add to Slack"/GitHub App installs (setup uses webhooks and secrets), refresh tokens,
-SMTP transport (emails are logged).
+daily digest emails.
 
 ## Testing
 
@@ -100,12 +119,14 @@ SMTP transport (emails are logged).
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-Four e2e suites (59 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+Five e2e suites (70 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
 ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
 epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
 prevention), signed webhook deliveries, bulk edit, favourites, overdue reminders, custom workflows
 (CRUD, reorder, category re-sync, delete-with-move, state automations), recurring tasks (rule maths,
 spawning once, end dates) and Slack/GitHub (signatures and replay window, slash commands, event filtering,
-PR lifecycle with forward-only moves, closing keywords, issues → tasks, repository filter).
+PR lifecycle with forward-only moves, closing keywords, issues → tasks, repository filter) and email
+(authenticated SMTP against a real test server, templates and escaping, preference defaults and opt-in/out,
+signed and one-click unsubscribe, no retry on 5xx, retry on 4xx, admin status and test send).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

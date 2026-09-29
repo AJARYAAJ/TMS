@@ -17,8 +17,10 @@ import { InitialSchema1727500000000 } from './migrations/1727500000000-InitialSc
 import { WorkManagementExtensions1727600000000 } from './migrations/1727600000000-WorkManagementExtensions';
 import { WorkflowsAndRecurrence1727700000000 } from './migrations/1727700000000-WorkflowsAndRecurrence';
 import { SlackGithubIntegrations1727800000000 } from './migrations/1727800000000-SlackGithubIntegrations';
+import { EmailNotifications1727900000000 } from './migrations/1727900000000-EmailNotifications';
 import { ExternalLink, Integration } from '../modules/integrations/integration.entity';
 import { WorkflowState } from '../modules/workflow/workflow-state.entity';
+import { EmailDelivery } from '../modules/email/email-delivery.entity';
 import { Automation } from '../modules/automations/automation.entity';
 import { Document } from '../modules/documents/document.entity';
 import { Favorite } from '../modules/favorites/favorite.entity';
@@ -31,6 +33,7 @@ import { TimeEntry } from '../modules/time/time-entry.entity';
 export const ENTITIES = [
   User, Organization, Membership, Team, TeamMember, Project, Sprint, Task, TaskLink, Label, Comment, Attachment, Activity, Notification,
   TimeEntry, Goal, KeyResult, Document, Automation, Webhook, WebhookDelivery, Favorite, WorkflowState, Integration, ExternalLink,
+  EmailDelivery,
 ];
 
 export function dataSourceOptions(url = loadConfig().databaseUrl): DataSourceOptions {
@@ -38,7 +41,7 @@ export function dataSourceOptions(url = loadConfig().databaseUrl): DataSourceOpt
     type: 'postgres',
     url,
     entities: ENTITIES,
-    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000],
+    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000, EmailNotifications1727900000000],
     migrationsRun: true,
     synchronize: false,
     namingStrategy: new SnakeNamingStrategy(),

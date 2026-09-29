@@ -11,13 +11,6 @@ export interface ProjectSetupJob {
   projectId: string;
 }
 
-export interface NotificationEmailJob {
-  to: string;
-  subject: string;
-  body: string;
-  link?: string;
-}
-
 export function redisConnection(url: string) {
   const u = new URL(url);
   return {

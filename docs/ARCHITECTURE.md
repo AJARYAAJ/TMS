@@ -44,9 +44,10 @@ subscribers. Modules talk to each other through the event bus rather than callin
 | `comments` | comments with `@mentions` |
 | `attachments`, `storage` | signed-URL uploads and downloads |
 | `activity` | append-only audit log built from domain events |
-| `notifications` | who-should-know rules, in-app inbox, email jobs |
+| `notifications` | who-should-know rules, in-app inbox, queues emails by category |
+| `email` | SMTP transport, templates, per-user preferences, unsubscribe tokens, delivery log |
 | `realtime` | socket.io gateway + relay of domain events to rooms |
-| `jobs` | BullMQ queue + worker (project setup, email) |
+| `jobs` | BullMQ queue + worker (project setup, email delivery, overdue scan) |
 | `search` | PostgreSQL full-text search across tasks, projects, people, comments |
 | `reports` | dashboard (incl. completion heatmap) and project analytics |
 | `labels` | organization-wide labels |
@@ -117,6 +118,26 @@ be checked byte-for-byte.
   PR opened or merged moves the task to the configured state or category, but **only forward** by category
   rank. `fixes/closes/resolves KEY` on the default branch and closed linked issues complete tasks. New issues
   can create tasks (a `bug` label makes them bugs). Changes are attributed to e.g. "octocat via GitHub".
+
+### Email
+
+`NotificationListener` gives each notification draft an email *category* (`assigned`, `mentioned`, `overdue`,
+`automation`, `workspace`, `comments`, `status`, `sprints`). For recipients whose preferences allow it, it queues a
+`notification.email` job. Preferences are stored as sparse overrides in `users.email_prefs` and merged with
+per-category defaults. The job processor calls `EmailService.deliver`, which:
+
+1. re-checks preferences, so an unsubscribe also stops mail that is already queued;
+2. renders the HTML (table layout with inline styles, all user text escaped) and plain-text versions;
+3. sends through a pooled nodemailer SMTP transport, or a JSON transport that only logs when SMTP is not configured;
+4. records the final outcome in `email_deliveries`.
+
+5xx rejections fail immediately (`UnrecoverableError`). 4xx and network errors retry with exponential backoff,
+up to 5 attempts.
+
+Unsubscribe tokens are `base64url(userId:category).HMAC` under a key derived from `JWT_SECRET`. They don't
+expire and can only turn email off. Emails link to the SPA's `/unsubscribe` confirmation page (a GET changes
+nothing, so link scanners are harmless). They also carry `List-Unsubscribe` / `List-Unsubscribe-Post` headers
+pointing at `POST /api/v1/email/unsubscribe` for RFC 8058 one-click unsubscribes.
 
 ### Board ordering
 
