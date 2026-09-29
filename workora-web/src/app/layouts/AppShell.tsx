@@ -14,6 +14,7 @@ import {
   Moon,
   Plus,
   Settings,
+  Settings2,
   Square,
   Sun,
   Target,
@@ -21,7 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Avatar, Skeleton } from '@/components/ui';
 import { useSignOut, useSwitchOrganization } from '@/features/auth/api';
 import { useCan, useSession } from '@/features/auth/session.store';
@@ -181,6 +182,9 @@ function UserMenu() {
             ))}
           </div>
           <div className="menu-divider" />
+          <Link className="menu-item" role="menuitem" to="/settings" onClick={() => setOpen(false)}>
+            <Settings2 size={14} /> Notification settings
+          </Link>
           <button className="menu-item" role="menuitem" onClick={signOut}>
             <LogOut size={14} /> Sign out
           </button>

@@ -33,4 +33,6 @@ export const qk = {
   roadmap: (projectId?: string) => ['roadmap', projectId ?? 'all'] as const,
   workflow: (projectId: string) => ['workflow', projectId] as const,
   integrations: ['integrations'] as const,
+  emailPrefs: ['email', 'preferences'] as const,
+  emailStatus: ['email', 'status'] as const,
 };

@@ -331,3 +331,40 @@ export interface RealtimeEvent<T = any> {
   occurredAt: string;
   data: T;
 }
+
+export interface EmailCategoryOption {
+  key: string;
+  label: string;
+  description: string;
+  default: boolean;
+}
+
+export interface EmailPreferences {
+  email: string;
+  enabled: boolean;
+  categories: Record<string, boolean>;
+  options: EmailCategoryOption[];
+}
+
+export interface EmailDelivery {
+  id: string;
+  recipient: string;
+  category: string;
+  subject: string;
+  status: 'sent' | 'failed' | 'skipped';
+  error: string | null;
+  attempts: number;
+  createdAt: string;
+}
+
+export interface EmailStatus {
+  transport: 'smtp' | 'log';
+  host: string | null;
+  port: number | null;
+  secure: boolean;
+  requireTls: boolean;
+  authenticated: boolean;
+  from: string;
+  last7Days: { sent: number; failed: number; skipped: number };
+  deliveries: EmailDelivery[];
+}

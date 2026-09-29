@@ -1559,6 +1559,10 @@ code {
 .menu-item:hover {
   background: var(--surface-3);
 }
+a.menu-item {
+  color: inherit;
+  text-decoration: none;
+}
 .menu-divider {
   height: 1px;
   background: var(--line);
@@ -4333,6 +4337,208 @@ a.project-card:hover {
   font-weight: 700;
 }
 
+/* ---------- Settings & email ---------- */
+.block {
+  display: block;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.email-prefs {
+  display: grid;
+  gap: 8px;
+}
+.email-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  margin: -4px -4px 4px;
+  border-radius: 18px;
+  background: var(--volt-soft);
+  transition: background 0.2s;
+}
+.email-hero.off {
+  background: var(--surface-2);
+}
+.email-hero h2 {
+  margin: 0 0 2px;
+}
+.email-hero p {
+  margin: 0;
+}
+.email-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--volt);
+  transform: rotate(-4deg);
+}
+.email-hero.off .email-hero-icon {
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+.switch-lg {
+  width: 46px;
+  height: 26px;
+}
+.switch-lg span::after {
+  width: 20px;
+  height: 20px;
+}
+.switch-lg input:checked + span::after {
+  transform: translateX(20px);
+}
+.pref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+.pref-list.muted-list {
+  opacity: 0.45;
+}
+.pref-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 6px;
+  border-top: 1px solid var(--line);
+}
+.pref-list li:first-child {
+  border-top: 0;
+}
+.pref-list li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.settings-aside {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.settings-aside h3 {
+  margin: 0;
+}
+.settings-aside .muted,
+.settings-aside a:not(.btn) {
+  color: color-mix(in srgb, var(--on-ink) 70%, transparent);
+}
+.settings-aside svg:first-child {
+  color: var(--volt);
+}
+.unsub-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--volt-soft);
+  font-weight: 600;
+}
+.int-logo.mail {
+  background: var(--accent);
+  color: #fff;
+}
+.int-logo.mail.off {
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+.smtp-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.smtp-facts > div {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.smtp-facts dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.smtp-facts dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.smtp-off {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.smtp-off > div {
+  display: grid;
+  gap: 4px;
+}
+.mail-stats {
+  display: flex;
+  gap: 28px;
+  padding: 4px 2px;
+}
+.mail-stats > div {
+  display: grid;
+}
+.mail-stats strong {
+  font: 700 28px/1.1 var(--font-display);
+}
+.mail-stats .bad strong {
+  color: var(--danger);
+}
+.mail-log {
+  table-layout: fixed;
+}
+.mail-log th:nth-child(1) {
+  width: 110px;
+}
+.mail-log th:nth-child(2) {
+  width: 24%;
+}
+.mail-log th:nth-child(4) {
+  width: 110px;
+}
+.mail-log th:nth-child(5) {
+  width: 110px;
+}
+.mail-status {
+  font: 700 10.5px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--ink-2);
+}
+.ms-sent {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.ms-failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 @media (max-width: 1100px) {
   .bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4343,6 +4549,13 @@ a.project-card:hover {
   }
 }
 @media (max-width: 900px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .mail-log th:nth-child(4),
+  .mail-log td:nth-child(4) {
+    display: none;
+  }
   .dashboard-grid,
   .admin-grid,
   .docs-layout {

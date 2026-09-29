@@ -1,4 +1,4 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { config } from '@/config';
 import { LoginPage, RegisterPage, RequireAuth } from '@/features/auth/AuthPages';
@@ -29,11 +29,14 @@ const TimePage = lazy(() => import('@/features/time/TimePage'));
 const InboxPage = lazy(() => import('@/features/inbox/InboxPage'));
 const AutomationsView = lazy(() => import('@/features/automations/AutomationsView'));
 const WorkflowView = lazy(() => import('@/features/workflow/WorkflowView'));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
+const UnsubscribePage = lazy(() => import('@/features/settings/UnsubscribePage'));
 
 export const router = createBrowserRouter(
   [
     { path: '/login', element: <LoginPage /> },
     { path: '/register', element: <RegisterPage /> },
+    { path: '/unsubscribe', element: <Suspense fallback={null}><UnsubscribePage /></Suspense> },
     {
       path: '/',
       element: (
@@ -73,6 +76,7 @@ export const router = createBrowserRouter(
         { path: 'time', element: <TimePage /> },
         { path: 'reports', element: <ReportsHub /> },
         { path: 'admin', element: <AdminPage /> },
+        { path: 'settings', element: <SettingsPage /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
