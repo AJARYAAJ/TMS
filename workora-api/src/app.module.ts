@@ -25,6 +25,7 @@ import { ViewsModule } from './modules/views/views.module';
 import { InsightsModule } from './modules/insights/insights.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { CsvModule } from './modules/csv/csv.module';
+import { SsoModule } from './modules/sso/sso.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -81,6 +82,7 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
     InsightsModule,
     FormsModule,
     CsvModule,
+    SsoModule,
     NotificationsModule,
     SearchModule,
     ReportsModule,

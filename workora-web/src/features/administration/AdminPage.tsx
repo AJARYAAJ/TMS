@@ -6,6 +6,7 @@ import { useCan, useSession } from '@/features/auth/session.store';
 import { TeamsPanel } from '@/features/teams/TeamsPage';
 import { IntegrationsPanel, LabelsPanel } from './ExtraPanels';
 import { EmailPanel } from './EmailPanel';
+import { SecurityPanel } from './SecurityPanel';
 import { GithubCard, SlackCard } from './IntegrationCards';
 import { ApiError, errorMessage } from '@/services/api/client';
 import type { Role } from '@/types';
@@ -16,9 +17,9 @@ const ROLES: Role[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
 /** Administration module (lazy-loaded): members, roles (RBAC) and teams. */
 export default function AdminPage() {
-  type Tab = 'members' | 'teams' | 'labels' | 'integrations' | 'email';
+  type Tab = 'members' | 'teams' | 'labels' | 'integrations' | 'email' | 'security';
   const [params, setParams] = useSearchParams();
-  const tab = (['members', 'teams', 'labels', 'integrations', 'email'].includes(params.get('tab') ?? '') ? params.get('tab') : 'members') as Tab;
+  const tab = (['members', 'teams', 'labels', 'integrations', 'email', 'security'].includes(params.get('tab') ?? '') ? params.get('tab') : 'members') as Tab;
   const setTab = (t: Tab) => setParams(t === 'members' ? {} : { tab: t }, { replace: true });
   const session = useSession()!;
   return (
@@ -45,11 +46,16 @@ export default function AdminPage() {
         <button role="tab" aria-selected={tab === 'email'} className={tab === 'email' ? 'active' : ''} onClick={() => setTab('email')}>
           Email
         </button>
+        <button role="tab" aria-selected={tab === 'security'} className={tab === 'security' ? 'active' : ''} onClick={() => setTab('security')}>
+          Security
+        </button>
       </div>
       {tab === 'members' ? <Members /> : tab === 'teams' ? <TeamsPanel /> : tab === 'labels' ? (
         <LabelsPanel />
       ) : tab === 'email' ? (
         <EmailPanel />
+      ) : tab === 'security' ? (
+        <SecurityPanel />
       ) : (
         <div className="int-stack">
           <SlackCard />
@@ -80,6 +86,7 @@ function Members() {
               <tr>
                 <th>Name</th>
                 <th>Role</th>
+                <th>2FA</th>
                 <th>Joined</th>
                 <th />
               </tr>
@@ -108,6 +115,11 @@ function Members() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td>
+                      <span className={`sec-pill ${m.twoFactorEnabled ? 'ok' : ''}`} title={m.twoFactorEnabled ? 'Two-factor authentication on' : 'Two-factor authentication off'}>
+                        {m.twoFactorEnabled ? 'On' : 'Off'}
+                      </span>
                     </td>
                     <td className="muted small">{formatDate(m.joinedAt, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                     <td>

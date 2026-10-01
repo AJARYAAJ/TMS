@@ -1,9 +1,12 @@
-import { FormEvent, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { KeyRound } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { config } from '@/config';
+import { CodeInput, TwoFactorCard } from '@/features/settings/Security';
 import { Spinner } from '@/components/ui';
-import { errorMessage } from '@/services/api/client';
-import { useLogin, useRegister } from './api';
-import { useSession } from './session.store';
+import { api, errorMessage } from '@/services/api/client';
+import { refreshSession, useLogin, useRegister, useSecondFactor } from './api';
+import { useSession, useSessionStore } from './session.store';
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
@@ -44,39 +47,163 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
   );
 }
 
+interface SsoHint {
+  sso: boolean;
+  providerName?: string;
+  enforced?: boolean;
+  startUrl?: string;
+}
+
 export function LoginPage() {
   const session = useSession();
   const location = useLocation();
   const login = useLogin();
+  const second = useSecondFactor();
+  const [params] = useSearchParams();
   const [email, setEmail] = useState('demo@workora.dev');
   const [password, setPassword] = useState('workora123');
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [sso, setSso] = useState<SsoHint | null>(null);
+  const [ssoMode, setSsoMode] = useState(false);
+  const ssoError = params.get('sso_error');
+
+  // As the email is typed, ask whether its domain signs in through a company identity provider.
+  useEffect(() => {
+    const value = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return setSso(null);
+    const t = setTimeout(() => {
+      api.get<SsoHint>('/auth/sso/discover', { email: value }).then(setSso, () => setSso(null));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [email]);
+
   if (session) return <Navigate to={(location.state as any)?.from ?? '/'} replace />;
+  const goSso = () => sso?.startUrl && window.location.assign(sso.startUrl);
+  const ssoRequired = (login.error as any)?.code === 'SSO_REQUIRED';
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    login.mutate({ email, password });
+    if (ssoMode) return goSso();
+    login.mutate({ email, password }, { onSuccess: (r) => 'mfaRequired' in r && setChallenge(r.mfaToken) });
   };
+  const verify = (value = code) => challenge && value && second.mutate({ mfaToken: challenge, code: value });
+
+  if (challenge) {
+    return (
+      <AuthLayout title="Two-step verification" subtitle={useRecovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.'}>
+        <form
+          className="form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            verify();
+          }}
+        >
+          {useRecovery ? (
+            <input className="code-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="abcd-efgh" aria-label="Recovery code" autoFocus autoComplete="off" />
+          ) : (
+            <CodeInput value={code} onChange={setCode} onComplete={(v) => verify(v)} autoFocus />
+          )}
+          {second.isError && <div className="form-error">{errorMessage(second.error)}</div>}
+          <button className="btn btn-ink btn-block btn-lg" disabled={second.isPending || !code}>
+            {second.isPending ? <Spinner /> : 'Verify'}
+          </button>
+        </form>
+        <p className="muted small">
+          <button className="link-btn" onClick={() => { setUseRecovery(!useRecovery); setCode(''); second.reset(); }}>
+            {useRecovery ? 'Use your authenticator app' : 'Lost your phone? Use a recovery code'}
+          </button>
+          {' · '}
+          <button className="link-btn" onClick={() => { setChallenge(null); setCode(''); second.reset(); }}>
+            Start over
+          </button>
+        </p>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your workspace">
+      {ssoError && <div className="form-error">Single sign-on failed: {ssoError}</div>}
       <form className="form" onSubmit={submit}>
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
         </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </label>
-        {login.isError && <div className="form-error">{errorMessage(login.error)}</div>}
-        <button className="btn btn-ink btn-block btn-lg" disabled={login.isPending}>
-          {login.isPending ? <Spinner /> : 'Sign in'}
-        </button>
+        {sso?.sso && (
+          <button type="button" className="btn btn-volt btn-block btn-lg sso-btn" onClick={goSso}>
+            <KeyRound size={16} /> Continue with {sso.providerName}
+          </button>
+        )}
+        {!ssoMode && !(sso?.sso && sso.enforced) && (
+          <>
+            {sso?.sso && <div className="or-divider">or use your password</div>}
+            <label>
+              Password
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            </label>
+            {login.isError && <div className="form-error">{errorMessage(login.error)}{ssoRequired && sso?.sso ? ' Use the button above.' : ''}</div>}
+            <button className="btn btn-ink btn-block btn-lg" disabled={login.isPending}>
+              {login.isPending ? <Spinner /> : 'Sign in'}
+            </button>
+          </>
+        )}
+        {ssoMode && !sso?.sso && <p className="muted small">Enter your work email — we'll find your company's sign-in.</p>}
       </form>
       <p className="muted small">
+        {!sso?.sso && (
+          <>
+            <button className="link-btn" onClick={() => setSsoMode(!ssoMode)}>
+              {ssoMode ? 'Sign in with a password' : 'Sign in with SSO'}
+            </button>
+            {' · '}
+          </>
+        )}
         New to Workora? <Link to="/register">Create a workspace</Link>
       </p>
       <p className="hint">Demo: demo@workora.dev / workora123 (also rahul@, priya@, viewer@)</p>
+    </AuthLayout>
+  );
+}
+
+/** Lands here after the identity provider: the session token arrives in the URL fragment. */
+export function SsoCallbackPage() {
+  const setSession = useSessionStore((s) => s.setSession);
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.hash.slice(1)).get('token');
+    history.replaceState(null, '', window.location.pathname); // drop the token from the address bar
+    if (!token) return setError('The sign-in link is incomplete.');
+    fetch(`${config.apiBase}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j?.success) throw new Error(j?.error?.message ?? 'Sign-in failed');
+        setSession({ token, ...j.data });
+        navigate('/', { replace: true });
+      })
+      .catch((e) => setError(e.message));
+  }, [navigate, setSession]);
+  return (
+    <AuthLayout title={error ? 'Sign-in failed' : 'Signing you in…'} subtitle={error ?? 'Finishing single sign-on.'}>
+      {error ? <Link to="/login">Back to sign in</Link> : <Spinner />}
+    </AuthLayout>
+  );
+}
+
+/** The workspace requires 2FA: until it's on, the app shows only this. */
+function MfaGate() {
+  const session = useSession()!;
+  const signOut = useSessionStore((s) => s.signOut);
+  return (
+    <AuthLayout title="Turn on two-factor authentication" subtitle={`${session.organization.name} requires it for every member. It takes a minute.`}>
+      <TwoFactorCard onEnabled={() => refreshSession().catch(() => undefined)} />
+      <p className="muted small">
+        <button className="link-btn" onClick={signOut}>
+          Sign out
+        </button>
+      </p>
     </AuthLayout>
   );
 }
@@ -131,5 +258,6 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const session = useSession();
   const location = useLocation();
   if (!session) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (session.security?.mfaSetupRequired) return <MfaGate />;
   return <>{children}</>;
 }

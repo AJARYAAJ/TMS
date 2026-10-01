@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_CONFIG, AppConfig, loadConfig } from '../config';
 import { TokenService } from './auth/token.service';
+import { SecretBox } from './crypto/secret-box';
 import { EventBus } from './events/event-bus.service';
 
 @Global()
@@ -14,7 +15,7 @@ import { EventBus } from './events/event-bus.service';
       },
     }),
   ],
-  providers: [{ provide: APP_CONFIG, useFactory: (): AppConfig => loadConfig() }, TokenService, EventBus],
-  exports: [APP_CONFIG, TokenService, EventBus, JwtModule],
+  providers: [{ provide: APP_CONFIG, useFactory: (): AppConfig => loadConfig() }, { provide: SecretBox, useFactory: () => new SecretBox(loadConfig().encryptionKey) }, TokenService, EventBus],
+  exports: [APP_CONFIG, SecretBox, TokenService, EventBus, JwtModule],
 })
 export class CommonModule {}

@@ -158,6 +158,27 @@ export class EmailService {
     }
   }
 
+  /**
+   * Security notices (2FA turned on/off, recovery codes used). Always sent, never subject to
+   * preferences, and failures are logged rather than thrown so they never block the action.
+   */
+  async securityNotice(to: { email: string; name: string }, heading: string, body: string) {
+    const { html, text } = renderNotificationEmail({
+      orgName: 'Account security',
+      heading,
+      body: `${body}\n\nIf this wasn't you, change your password and contact your workspace admin.`,
+      actorName: to.name,
+      cta: { label: 'Review security settings', url: `${this.config.appUrl}/settings` },
+      reason: 'of a security change on your Workora account',
+      preferencesUrl: `${this.config.appUrl}/settings`,
+    });
+    try {
+      await this.send({ to: to.email, subject: `Workora security: ${heading}`, html, text });
+    } catch (err) {
+      this.logger.warn(`Security notice to ${to.email} failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   private record(job: NotificationEmailJob, recipient: string, status: DeliveryStatus, extra: Partial<EmailDelivery> = {}) {
     return this.save({ organizationId: job.organizationId, userId: job.userId, recipient, category: job.category, subject: job.subject.slice(0, 250), status, ...extra });
   }

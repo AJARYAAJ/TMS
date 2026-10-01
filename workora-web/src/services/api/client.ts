@@ -40,6 +40,11 @@ async function request<T>(method: string, path: string, opts: { body?: unknown; 
   if (!res.ok || !json?.success) {
     const err = json?.error ?? { code: `HTTP_${res.status}`, message: res.statusText || 'Request failed' };
     if (res.status === 401 && token) useSessionStore.getState().signOut();
+    // The workspace requires 2FA and this account hasn't set it up: the app shows the setup gate.
+    if (res.status === 403 && err.code === 'MFA_SETUP_REQUIRED') {
+      const sec = useSessionStore.getState().session?.security;
+      if (sec && !sec.mfaSetupRequired) useSessionStore.getState().update({ security: { ...sec, mfaSetupRequired: true } });
+    }
     throw new ApiError(res.status, err.code, err.message, err.details);
   }
   return { data: json.data as T, meta: json.meta ?? {} };

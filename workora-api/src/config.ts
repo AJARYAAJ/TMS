@@ -21,6 +21,8 @@ export interface AppConfig {
   /** Public base URL of the API (one-click unsubscribe links in emails). */
   apiPublicUrl: string;
   smtp: SmtpConfig;
+  /** Key material for secrets at rest (TOTP seeds, SSO client secrets). Defaults to one derived from JWT_SECRET. */
+  encryptionKey: string;
 }
 
 export interface SmtpConfig {
@@ -72,6 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     appUrl: (env.APP_URL ?? 'http://localhost:5173/workora').replace(/\/$/, ''),
     apiPublicUrl: (env.API_PUBLIC_URL ?? `${new URL(env.APP_URL ?? 'http://localhost:5173').origin}/api/v1`).replace(/\/$/, ''),
     smtp: smtpConfig(env),
+    encryptionKey: env.ENCRYPTION_KEY ?? `derived:${env.JWT_SECRET ?? 'dev-only-secret-change-me'}`,
     webhookAllowPrivate: (env.WEBHOOK_ALLOW_PRIVATE ?? (env.NODE_ENV === 'production' ? 'false' : 'true')) === 'true',
   };
 }

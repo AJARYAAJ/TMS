@@ -2,15 +2,32 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/toast';
 import { api, errorMessage } from '@/services/api/client';
-import type { Session } from '@/types';
+import type { MfaChallenge, Session } from '@/types';
 import { useSessionStore } from './session.store';
 
+/** Password sign-in. Resolves to a session, or to a 2FA challenge when the account has 2FA on. */
 export function useLogin() {
   const setSession = useSessionStore((s) => s.setSession);
   return useMutation({
-    mutationFn: (body: { email: string; password: string }) => api.post<Session>('/auth/login', body),
+    mutationFn: (body: { email: string; password: string }) => api.post<Session | MfaChallenge>('/auth/login', body),
+    onSuccess: (r) => {
+      if ('token' in r) setSession(r);
+    },
+  });
+}
+
+export function useSecondFactor() {
+  const setSession = useSessionStore((s) => s.setSession);
+  return useMutation({
+    mutationFn: (body: { mfaToken: string; code: string }) => api.post<Session>('/auth/login/2fa', body),
     onSuccess: setSession,
   });
+}
+
+/** Re-reads /auth/me (e.g. after turning on 2FA) and refreshes the stored session. */
+export async function refreshSession() {
+  const me = await api.get<Omit<Session, 'token'>>('/auth/me');
+  useSessionStore.getState().update(me);
 }
 
 export function useRegister() {

@@ -1139,6 +1139,7 @@ code {
 .auth-card {
   width: 100%;
   max-width: 380px;
+  min-width: 0;
 }
 .auth-card > p.muted {
   margin: 6px 0 24px;
@@ -1178,6 +1179,17 @@ code {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--ink-2);
+}
+.form label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.form label.check > input {
+  width: auto;
+  flex: none;
+  margin: 0;
 }
 .form label > input,
 .form label > select,
@@ -5899,6 +5911,197 @@ a.project-card:hover {
   color: var(--volt);
 }
 
+/* ════════════════ Security: 2FA & SSO ════════════════ */
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn-danger:hover {
+  filter: brightness(1.05);
+}
+.code-input {
+  width: 100%;
+  min-width: 0;
+  font: 700 28px var(--font-mono) !important;
+  letter-spacing: 0.35em;
+  text-align: center;
+  padding: 12px !important;
+}
+.code-input::placeholder {
+  color: var(--line-strong);
+}
+.sso-btn {
+  gap: 8px;
+}
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line-strong);
+}
+.settings-side {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.security-card {
+  display: grid;
+  gap: 12px;
+}
+.security-hero {
+  background: var(--surface-2);
+}
+.security-card.on .security-hero {
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+}
+.security-card.on .email-hero-icon {
+  color: var(--success);
+}
+.security-hero h2 {
+  font-size: 17px;
+}
+.sec-pill {
+  font: 700 10.5px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--ink-2);
+  white-space: nowrap;
+  flex: none;
+}
+.sec-pill.ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.sec-note {
+  background: var(--volt-soft);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 0;
+}
+.tfa-setup {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.tfa-qr {
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: var(--shadow-1);
+  line-height: 0;
+}
+.tfa-qr svg {
+  width: 100%;
+  height: auto;
+}
+.tfa-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 12px;
+  font-size: 13.5px;
+}
+.tfa-secret {
+  font: 600 12.5px var(--font-mono);
+  letter-spacing: 0.04em;
+  white-space: normal !important;
+  word-break: break-all;
+}
+.tfa-verify {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+.tfa-verify .code-input {
+  max-width: 190px;
+  font-size: 22px !important;
+}
+.tfa-form {
+  display: grid;
+  gap: 10px;
+}
+.recovery {
+  display: grid;
+  gap: 10px;
+  border: 2px dashed var(--line-strong);
+  border-radius: 16px;
+  padding: 14px;
+}
+.recovery p {
+  margin: 0;
+}
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  padding-left: 22px;
+  font: 600 14px var(--font-mono);
+}
+.sec-members {
+  display: grid;
+  gap: 6px;
+}
+.sec-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.sec-bar span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  border-radius: 99px;
+}
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.domain-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 6px;
+  background: var(--surface);
+}
+.domain-chips .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.domain-chips input {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  flex: 1;
+  min-width: 120px;
+  padding: 4px !important;
+}
+.auth-card .security-card {
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+  margin-top: 14px;
+}
+
 @media (max-width: 1100px) {
   .bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5960,6 +6163,12 @@ a.project-card:hover {
 }
 /* Phones: the dock becomes a bottom tab bar */
 @media (max-width: 700px) {
+  .tfa-setup {
+    grid-template-columns: 1fr;
+  }
+  .tfa-qr {
+    max-width: 200px;
+  }
   .heatmap-wrap {
     grid-template-columns: 1fr;
     grid-template-areas: 'map' 'legend' 'stats';

@@ -27,6 +27,43 @@ export interface Session {
   organization: Organization;
   role: Role;
   organizations: Organization[];
+  security?: SessionSecurity;
+}
+
+export interface SessionSecurity {
+  signedInWith: 'pwd' | 'mfa' | 'sso';
+  twoFactorEnabled: boolean;
+  workspaceRequiresTwoFactor: boolean;
+  mfaSetupRequired: boolean;
+}
+
+export interface MfaChallenge {
+  mfaRequired: true;
+  mfaToken: string;
+  methods: string[];
+}
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  enabledAt: string | null;
+  recoveryCodesLeft: number;
+  requiredByWorkspace: boolean;
+  signedInWith: 'pwd' | 'mfa' | 'sso';
+}
+
+export interface SsoConnection {
+  id: string;
+  providerName: string;
+  issuer: string;
+  clientId: string;
+  hasClientSecret: boolean;
+  domains: string[];
+  autoProvision: boolean;
+  defaultRole: Role;
+  enforce: boolean;
+  enabled: boolean;
+  lastLoginAt: string | null;
+  lastError: string | null;
 }
 
 export interface Project {
@@ -309,6 +346,7 @@ export interface Member {
   user: UserSummary;
   role: Role;
   joinedAt: string;
+  twoFactorEnabled?: boolean;
 }
 
 export interface Team {

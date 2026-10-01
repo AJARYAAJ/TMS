@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { config } from '@/config';
-import { LoginPage, RegisterPage, RequireAuth } from '@/features/auth/AuthPages';
+import { LoginPage, RegisterPage, RequireAuth, SsoCallbackPage } from '@/features/auth/AuthPages';
 import DashboardPage from '@/features/dashboard/DashboardPage';
 import { AppShell } from './layouts/AppShell';
 
@@ -43,6 +43,7 @@ export const router = createBrowserRouter(
   [
     { path: '/login', element: <LoginPage /> },
     { path: '/register', element: <RegisterPage /> },
+    { path: '/sso/callback', element: <SsoCallbackPage /> },
     { path: '/unsubscribe', element: <Suspense fallback={null}><UnsubscribePage /></Suspense> },
     { path: '/f/:slug', element: <Suspense fallback={null}><PublicFormPage /></Suspense> },
     {

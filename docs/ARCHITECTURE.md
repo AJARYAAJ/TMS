@@ -183,6 +183,41 @@ expire and can only turn email off. Emails link to the SPA's `/unsubscribe` conf
 nothing, so link scanners are harmless). They also carry `List-Unsubscribe` / `List-Unsubscribe-Post` headers
 pointing at `POST /api/v1/email/unsubscribe` for RFC 8058 one-click unsubscribes.
 
+### Two-factor authentication
+
+TOTP follows RFC 6238: SHA-1, 6 digits, 30-second steps, and one step of clock drift accepted either way. The
+last accepted step is stored in `users.totp_last_step` and advanced with a conditional `UPDATE`, so a code can't
+be used twice, even by two requests at the same time. Secrets are sealed with `SecretBox` (AES-256-GCM,
+`v1.iv.tag.data`). Recovery codes are stored as SHA-256 hashes and spent with an atomic jsonb `-`.
+
+Sign-in has two steps. When 2FA is on, `POST /auth/login` returns `{ mfaRequired, mfaToken }`. The `mfaToken` is a
+5-minute JWT with `typ: 'mfa'` that `TokenService.authenticate` never accepts as a session. `POST /auth/login/2fa`
+exchanges it plus a code for a session token with `amr: 'mfa'`. When `organizations.require_2fa` is set, a
+password session without 2FA gets `403 MFA_SETUP_REQUIRED` on every route except those marked
+`@AllowWithoutMfa` (`/auth/me`, 2FA setup, switching workspace). The SPA then shows a setup gate. SSO sessions are
+exempt because the identity provider applies its own MFA.
+
+### Single sign-on (OIDC)
+
+Each workspace has at most one `sso_connections` row. It holds the issuer, the client ID, the sealed client
+secret, the claimed email domains (unique across workspaces) and the auto-provision, default-role and enforce
+flags. Identities link through `user_identities (connection_id, subject)`, so a changed email at the provider
+doesn't create a new account.
+
+1. `GET /auth/sso/discover?email=` tells the login page whether the domain has SSO and whether it is enforced.
+2. `GET /auth/sso/start` creates the state, nonce and PKCE verifier and seals them into an HttpOnly cookie scoped
+   to `/api/v1/auth/sso`. It then redirects to the provider's authorization endpoint (S256 challenge).
+3. `GET /auth/sso/callback` checks that `state` matches the cookie and exchanges the code (with the verifier).
+   It then verifies the ID token: RS*/ES* signature against the provider's JWKS (cached, refetched for an unknown
+   `kid`), `iss`, `aud`, `exp`/`iat` with 2 minutes of skew, and `nonce`. An email the provider marks unverified is refused.
+4. It links an existing identity, or an existing member with that email, or creates the user if auto-provision is
+   on. The session token (`amr: 'sso'`) goes back to the SPA in the URL fragment (`/sso/callback#token=`). The
+   SPA removes it from history before loading the session. Failures redirect to `/login?sso_error=` and are
+   recorded on the connection.
+
+When SSO is enforced, password sign-in fails with `SSO_REQUIRED` for those domains. Owners are the exception,
+so a misconfigured provider can't lock the workspace out.
+
 ### Board ordering
 
 Each task has a dense, zero-based `position` within its `(project, workflow state)` column.

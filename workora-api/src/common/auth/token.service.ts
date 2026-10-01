@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
 import { Membership } from '../../modules/organizations/membership.entity';
-import { AuthPrincipal, JwtPayload } from './principal';
+import { AuthPrincipal, JwtPayload, SignInMethod } from './principal';
 
 @Injectable()
 export class TokenService {
@@ -11,9 +11,24 @@ export class TokenService {
     private readonly dataSource: DataSource,
   ) {}
 
-  issue(userId: string, organizationId: string) {
-    const payload: JwtPayload = { sub: userId, org: organizationId };
+  issue(userId: string, organizationId: string, amr: SignInMethod = 'pwd') {
+    const payload: JwtPayload = { sub: userId, org: organizationId, amr };
     return this.jwt.signAsync(payload);
+  }
+
+  /** After a correct password, when 2FA is on: proves step one for 5 minutes, nothing more. */
+  issueMfaChallenge(userId: string, organizationId: string) {
+    const payload: JwtPayload = { sub: userId, org: organizationId, typ: 'mfa' };
+    return this.jwt.signAsync(payload, { expiresIn: '5m' });
+  }
+
+  async verifyMfaChallenge(token: string): Promise<{ userId: string; organizationId: string } | null> {
+    try {
+      const p = await this.jwt.verifyAsync<JwtPayload>(token);
+      return p.typ === 'mfa' ? { userId: p.sub, organizationId: p.org } : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -28,17 +43,22 @@ export class TokenService {
     } catch {
       return null;
     }
+    if (payload.typ) return null; // challenge tokens are not sessions
     const membership = await this.dataSource.getRepository(Membership).findOne({
       where: { userId: payload.sub, organizationId: payload.org },
-      relations: { user: true },
+      relations: { user: true, organization: true },
     });
     if (!membership) return null;
+    const amr = payload.amr ?? 'pwd';
     return {
       userId: membership.userId,
       organizationId: membership.organizationId,
       role: membership.role,
       email: membership.user.email,
       name: membership.user.name,
+      amr,
+      // SSO sign-ins are exempt: the identity provider enforces its own MFA.
+      mfaSetupRequired: membership.organization.require2fa && !membership.user.totpEnabledAt && amr !== 'sso',
     };
   }
 }

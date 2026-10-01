@@ -4,7 +4,7 @@ import { CurrentUser, MinRole } from '../../common/auth/decorators';
 import { AuthPrincipal } from '../../common/auth/principal';
 import { Role } from '../../common/auth/roles';
 import { describeSession } from '../auth/auth.service';
-import { AddMemberDto, CreateOrganizationDto, UpdateMemberDto } from './organizations.dto';
+import { AddMemberDto, CreateOrganizationDto, SecurityPolicyDto, UpdateMemberDto } from './organizations.dto';
 import { OrganizationsService } from './organizations.service';
 import { DataSource } from 'typeorm';
 
@@ -30,6 +30,13 @@ export class OrganizationsController {
   @Get('current')
   current(@CurrentUser() user: AuthPrincipal) {
     return this.orgs.current(user.organizationId);
+  }
+
+  /** Security policy: require two-factor authentication for every member. */
+  @MinRole(Role.ADMIN)
+  @Patch('current/security')
+  security(@CurrentUser() user: AuthPrincipal, @Body() dto: SecurityPolicyDto) {
+    return this.orgs.setSecurity(user, dto.require2fa);
   }
 
   @Get('current/members')

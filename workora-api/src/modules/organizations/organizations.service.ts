@@ -21,7 +21,7 @@ export async function createOrganization(m: EntityManager, name: string, ownerId
   return org;
 }
 
-const toMemberDto = (m: Membership) => ({ user: toUserSummary(m.user), role: m.role, joinedAt: m.createdAt });
+const toMemberDto = (m: Membership) => ({ user: toUserSummary(m.user), role: m.role, joinedAt: m.createdAt, twoFactorEnabled: !!m.user?.totpEnabledAt });
 
 @Injectable()
 export class OrganizationsService {
@@ -38,7 +38,7 @@ export class OrganizationsService {
   async current(orgId: string) {
     const org = await this.dataSource.getRepository(Organization).findOneByOrFail({ id: orgId });
     const memberCount = await this.dataSource.getRepository(Membership).countBy({ organizationId: orgId });
-    return { ...toOrganizationDto(org), memberCount, createdAt: org.createdAt };
+    return { ...toOrganizationDto(org), memberCount, createdAt: org.createdAt, require2fa: org.require2fa };
   }
 
   async members(orgId: string) {
@@ -48,6 +48,17 @@ export class OrganizationsService {
       order: { createdAt: 'ASC' },
     });
     return rows.map(toMemberDto);
+  }
+
+  /** Workspace security policy. Turning on "require 2FA" demands the admin has it themselves (no lock-out). */
+  async setSecurity(principal: AuthPrincipal, require2fa: boolean) {
+    if (require2fa && principal.amr !== 'sso') {
+      const me = await this.dataSource.getRepository(User).findOneByOrFail({ id: principal.userId });
+      if (!me.totpEnabledAt) throw ApiException.badRequest('MFA_REQUIRED_FIRST', 'Turn on two-factor authentication for your own account first');
+    }
+    await this.dataSource.getRepository(Organization).update({ id: principal.organizationId }, { require2fa });
+    const members = await this.members(principal.organizationId);
+    return { require2fa, membersWithout2fa: members.filter((m) => !m.twoFactorEnabled).length };
   }
 
   async addMember(principal: AuthPrincipal, dto: AddMemberDto) {

@@ -5,6 +5,7 @@ import { useUiStore } from '@/app/ui.store';
 import { SkeletonRows } from '@/components/ui';
 import { useSession } from '@/features/auth/session.store';
 import { useEmailPrefs, useUpdateEmailPrefs } from './api';
+import { TwoFactorCard } from './Security';
 
 /** Personal settings. Email notification preferences apply across every workspace you belong to. */
 export default function SettingsPage() {
@@ -73,6 +74,8 @@ export default function SettingsPage() {
           )}
         </section>
 
+        <div className="settings-side">
+        <TwoFactorCard />
         <aside className="tile settings-aside">
           <BellRing size={20} />
           <h3>How notifications reach you</h3>
@@ -84,6 +87,7 @@ export default function SettingsPage() {
             <Inbox size={13} /> Open Inbox
           </Link>
         </aside>
+        </div>
       </div>
     </div>
   );

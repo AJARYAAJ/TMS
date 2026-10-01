@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Role } from '../../common/auth/roles';
 
 export class CreateOrganizationDto {
@@ -15,4 +15,8 @@ export class AddMemberDto {
 
 export class UpdateMemberDto {
   @IsEnum(Role) role: Role;
+}
+
+export class SecurityPolicyDto {
+  @IsBoolean() require2fa: boolean;
 }

@@ -64,6 +64,8 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 | **Webhooks** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
 | **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live) and Inbox page |
 | **Email** | SMTP delivery (any provider, TLS/STARTTLS, auth, pooled) of branded HTML + plain-text emails via a retrying job queue; per-user preferences for 8 kinds of email; signed one-click unsubscribe (RFC 8058 `List-Unsubscribe`); admin status page with test send and delivery log |
+| **Two-factor auth** | Authenticator-app (TOTP) codes with QR setup, 10 single-use recovery codes, replay protection, a security email when 2FA turns on or off; admins can require 2FA for the whole workspace (members are guided through setup on their next request) and see who has it on |
+| **Single sign-on** | OpenID Connect with Okta, Microsoft Entra ID, Google Workspace, Auth0, Keycloak or any OIDC provider: PKCE + nonce, signed ID tokens checked against the provider's keys, email-domain routing (“Continue with Okta” appears as you type your email), just-in-time account creation with a default role, and optional enforcement that turns off password sign-in for those domains (owners keep it as break-glass) |
 | **Workspace** | Multi-tenant organizations, RBAC (Owner › Admin › Member › Viewer), teams, labels, favourites pinned to the dock |
 
 **Platform**
@@ -77,7 +79,7 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 | **Search** | Debounced global search + Ctrl K palette over tasks, projects, people, comments and docs (PostgreSQL FTS) |
 | **API** | Versioned `/api/v1`, uniform `{ success, data, meta }` / `{ success, error }` envelope, OpenAPI at `/api/docs` |
 | **Events & jobs** | Domain events after commit → activity log, notifications, realtime, automations, webhooks; BullMQ jobs |
-| **Security** | JWT, tenant isolation, RBAC, Redis rate limiting, signed file URLs, webhook SSRF guard in production |
+| **Security** | JWT (`amr` claim: password, 2FA or SSO), secrets encrypted at rest (AES-256-GCM), tenant isolation, RBAC, Redis rate limiting, signed file URLs, webhook SSRF guard in production |
 
 ### UI: “Paper & Volt”
 
@@ -120,7 +122,21 @@ until the person turns them on. Every email carries a signed unsubscribe link, a
 header so mail clients can show a one-click *Unsubscribe* button.
 
 Not yet built: OAuth "Add to Slack"/GitHub App installs (setup uses webhooks and secrets), refresh tokens,
-daily digest emails.
+daily digest emails, SAML, SCIM provisioning and passkeys.
+
+### Two-factor authentication and SSO
+
+Anyone can turn on 2FA under **Settings**. To require it for every member, an admin (with 2FA on themselves)
+flips the switch under **Admin → Security**.
+
+To add SSO, open **Admin → Security**, pick your provider and register a web application there with the
+redirect URI shown on the page (`<API_PUBLIC_URL>/auth/sso/callback`, scopes `openid email profile`). Then
+paste the issuer URL, client ID and client secret, add your email domains and press **Test**. One workspace
+can claim a given domain. Turn on *Require SSO* only after a test sign-in works.
+
+TOTP secrets and SSO client secrets are encrypted with `ENCRYPTION_KEY`. Set it to a long random value in
+production. When it is unset, a key is derived from `JWT_SECRET`, so rotating either one makes stored secrets
+unreadable: people then have to set up 2FA again, and admins have to re-enter the SSO client secret.
 
 ## Testing
 
@@ -128,7 +144,7 @@ daily digest emails.
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-Six e2e suites (90 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+Seven e2e suites (111 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
 ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
 epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
 prevention), signed webhook deliveries, bulk edit, favourites, overdue reminders, custom workflows
@@ -139,11 +155,14 @@ PR lifecycle with forward-only moves, closing keywords, issues → tasks, reposi
 signed and one-click unsubscribe, no retry on 5xx, retry on 4xx, admin status and test send).
 The newest suite covers custom fields (types, validation, filters, option renames), trash (subtasks, every query
 skips trashed tasks, restore into a deleted state, purge), saved views, burndown/velocity, workload allocation,
-intake forms, CSV import/export and labels (rename clash, merge, bulk add/remove).
+intake forms, CSV import/export and labels (rename clash, merge, bulk add/remove). The security suite covers TOTP
+(RFC 6238 vector, clock window, replay), encrypted secrets, recovery codes, the two-step sign-in, the workspace 2FA
+requirement, and OIDC SSO against a mock identity provider, including rejection of tampered audience, nonce,
+signature, expiry and issuer, browser binding of the login state, domain rules and enforced SSO.
 
 Browser-level checks (Playwright, against the seeded demo) cover the full UI flows as well: drag & drop,
 realtime, workflows, recurrence, integrations, email, custom fields, saved views, board filters, CSV import and
-export, trash with undo, workload, burndown, public forms on mobile, label merge, Explore, shortcuts and role
-restrictions.
+export, trash with undo, workload, burndown, public forms on mobile, label merge, Explore, shortcuts, role
+restrictions, 2FA setup, sign-in and the setup gate, and SSO sign-in and enforcement.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

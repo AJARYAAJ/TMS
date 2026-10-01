@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { ApiException } from '../http/api-exception';
-import { IS_PUBLIC, MIN_ROLE } from './decorators';
+import { ALLOW_WITHOUT_MFA, IS_PUBLIC, MIN_ROLE } from './decorators';
 import { AuthPrincipal } from './principal';
 import { hasRole, Role } from './roles';
 import { TokenService } from './token.service';
@@ -23,6 +23,9 @@ export class JwtAuthGuard implements CanActivate {
     const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
     const principal = await this.tokens.authenticate(token);
     if (!principal) throw ApiException.unauthorized();
+    if (principal.mfaSetupRequired && !this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA, [ctx.getHandler(), ctx.getClass()])) {
+      throw new ApiException(403, 'MFA_SETUP_REQUIRED', 'Your workspace requires two-factor authentication. Turn it on to continue.');
+    }
     req.user = principal;
     return true;
   }
