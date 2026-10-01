@@ -1,4 +1,4 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { config } from '@/config';
 import { LoginPage, RegisterPage, RequireAuth } from '@/features/auth/AuthPages';
@@ -29,11 +29,22 @@ const TimePage = lazy(() => import('@/features/time/TimePage'));
 const InboxPage = lazy(() => import('@/features/inbox/InboxPage'));
 const AutomationsView = lazy(() => import('@/features/automations/AutomationsView'));
 const WorkflowView = lazy(() => import('@/features/workflow/WorkflowView'));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
+const UnsubscribePage = lazy(() => import('@/features/settings/UnsubscribePage'));
+const ExplorePage = lazy(() => import('@/features/explore/ExplorePage'));
+const WorkloadPage = lazy(() => import('@/features/workload/WorkloadPage'));
+const TrashPage = lazy(() => import('@/features/trash/TrashPage'));
+const LabelPage = lazy(() => import('@/features/labels/LabelPage'));
+const FieldsView = lazy(() => import('@/features/fields/FieldsView'));
+const FormsView = lazy(() => import('@/features/forms/FormsView'));
+const PublicFormPage = lazy(() => import('@/features/forms/PublicFormPage'));
 
 export const router = createBrowserRouter(
   [
     { path: '/login', element: <LoginPage /> },
     { path: '/register', element: <RegisterPage /> },
+    { path: '/unsubscribe', element: <Suspense fallback={null}><UnsubscribePage /></Suspense> },
+    { path: '/f/:slug', element: <Suspense fallback={null}><PublicFormPage /></Suspense> },
     {
       path: '/',
       element: (
@@ -63,6 +74,8 @@ export const router = createBrowserRouter(
             { path: 'reports', element: <ReportsView /> },
             { path: 'automations', element: <AutomationsView /> },
             { path: 'workflow', element: <WorkflowView /> },
+            { path: 'fields', element: <FieldsView /> },
+            { path: 'forms', element: <FormsView /> },
           ],
         },
         { path: 'teams', element: <TeamsPage /> },
@@ -73,6 +86,11 @@ export const router = createBrowserRouter(
         { path: 'time', element: <TimePage /> },
         { path: 'reports', element: <ReportsHub /> },
         { path: 'admin', element: <AdminPage /> },
+        { path: 'settings', element: <SettingsPage /> },
+        { path: 'explore', element: <ExplorePage /> },
+        { path: 'workload', element: <WorkloadPage /> },
+        { path: 'trash', element: <TrashPage /> },
+        { path: 'labels/:labelId', element: <LabelPage /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },

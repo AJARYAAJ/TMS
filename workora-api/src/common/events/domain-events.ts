@@ -33,7 +33,13 @@ export type DomainEventType =
   | 'AUTOMATION_RAN'
   | 'WORKFLOW_UPDATED'
   | 'TASK_RECURRED'
-  | 'DEV_LINKED';
+  | 'DEV_LINKED'
+  | 'FIELDS_UPDATED'
+  | 'VIEWS_UPDATED'
+  | 'TASK_TRASHED'
+  | 'TASK_RESTORED'
+  | 'FORM_SUBMITTED'
+  | 'TASKS_IMPORTED';
 
 export interface FieldChange {
   from: unknown;

@@ -13,6 +13,9 @@ import { Sprint, Task, TASK_PRIORITIES, TASK_TYPES } from '@/types';
 import { formatDate, isOverdue, PRIORITY_LABEL, timeAgo, todayIso, toIsoDate, TYPE_LABEL } from '@/utils/format';
 import { useProjectActivity, useUsers } from './api';
 import { useProjectContext } from './ProjectLayout';
+import { CfFilter, CsvButtons, FieldFilter, SavedViewsBar } from './ListExtras';
+import { FieldDisplay } from '@/features/fields/FieldValues';
+import { useFields } from '@/features/fields/api';
 
 /* ───────────────────────────── Overview ───────────────────────────── */
 
@@ -106,8 +109,14 @@ export function ListView() {
   const { data: sprints } = useSprints(project.id);
   const { data: states } = useWorkflow(project.id);
   const [filters, setFilters] = useState<TaskFilters>({ sort: 'position', order: 'asc' });
+  const [cf, setCf] = useState<CfFilter>({});
   const [page, setPage] = useState(1);
-  const { data, isLoading, isFetching } = useTasks({ ...filters, projectId: project.id, page, size: 100 });
+  // A field filter without a value yet is pending: it doesn't narrow the list until a value is picked.
+  const cfActive = Object.fromEntries(Object.entries(cf).filter(([, v]) => v !== undefined && v !== null));
+  const cfParam = Object.keys(cfActive).length ? JSON.stringify(cfActive) : undefined;
+  const { data, isLoading, isFetching } = useTasks({ ...filters, cf: cfParam, projectId: project.id, page, size: 100 });
+  const { data: fields } = useFields(project.id);
+  const columns = (fields ?? []).filter((f) => f.showInList).slice(0, 3);
   const canEdit = useCan('MEMBER');
   const bulk = useBulkUpdate();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -129,6 +138,20 @@ export function ListView() {
 
   return (
     <div className="page">
+      <div className="list-head">
+        <SavedViewsBar
+          projectId={project.id}
+          filters={filters}
+          cf={cf}
+          onApply={(f, c) => {
+            setPage(1);
+            setSelected(new Set());
+            setFilters(f);
+            setCf(c);
+          }}
+        />
+        <CsvButtons project={project} />
+      </div>
       <div className="toolbar filters">
         <input className="filter-input" placeholder="Filter by title or key…" value={filters.q ?? ''} onChange={set('q')} aria-label="Filter tasks" />
         <select value={filters.stateId ?? ''} onChange={set('stateId')} aria-label="Status">
@@ -187,9 +210,22 @@ export function ListView() {
           <option value="updatedAt:desc">Recently updated</option>
           <option value="createdAt:desc">Newest</option>
         </select>
+        <FieldFilter projectId={project.id} cf={cf} onChange={(next) => {
+          setPage(1);
+          setCf(next);
+        }} />
         {isFetching && !isLoading && <Spinner size={12} />}
       </div>
       <div className="tile list-tile">
+        {columns.length > 0 && rows.length > 0 && (
+          <div className="list-colhead" aria-hidden>
+            {columns.map((f) => (
+              <span key={f.id} className="row-field ellipsis">
+                {f.name}
+              </span>
+            ))}
+          </div>
+        )}
         {canEdit && rows.length > 0 && (
           <label className="select-all">
             <input
@@ -205,7 +241,25 @@ export function ListView() {
         {isLoading ? (
           <SkeletonRows rows={8} />
         ) : rows.length ? (
-          rows.map((t, i) => <TaskRow key={t.id} task={t} selected={selected.has(t.id)} onSelect={canEdit ? (on, shift) => toggle(i, on, shift) : undefined} />)
+          rows.map((t, i) => (
+            <TaskRow
+              key={t.id}
+              task={t}
+              selected={selected.has(t.id)}
+              onSelect={canEdit ? (on, shift) => toggle(i, on, shift) : undefined}
+              trailing={
+                columns.length ? (
+                  <span className="row-fields">
+                    {columns.map((f) => (
+                      <span key={f.id} className="row-field" title={f.name}>
+                        <FieldDisplay field={f} value={t.customFields?.[f.id]} compact />
+                      </span>
+                    ))}
+                  </span>
+                ) : undefined
+              }
+            />
+          ))
         ) : (
           <EmptyState title="No matching tasks">Try clearing some filters.</EmptyState>
         )}
@@ -262,6 +316,22 @@ export function ListView() {
                   {s.name}
                 </option>
               ))}
+          </select>
+          <select value="" onChange={(e) => e.target.value && apply({ addLabelIds: [e.target.value] })} aria-label="Add label">
+            <option value="">+ Label…</option>
+            {labels?.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+          <select value="" onChange={(e) => e.target.value && apply({ removeLabelIds: [e.target.value] })} aria-label="Remove label">
+            <option value="">− Label…</option>
+            {labels?.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
           </select>
           {bulk.isPending && <Spinner size={12} />}
           <button className="icon-btn" onClick={() => setSelected(new Set())} aria-label="Clear selection">

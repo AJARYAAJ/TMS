@@ -5,7 +5,7 @@ import { errorMessage } from '@/services/api/client';
 import { useLogin, useRegister } from './api';
 import { useSession } from './session.store';
 
-function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+export function AuthLayout({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div className="auth-page">
       <section className="auth-manifesto" aria-hidden="true">

@@ -19,6 +19,12 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { redisConnection } from './modules/jobs/jobs.constants';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { EmailModule } from './modules/email/email.module';
+import { FieldsModule } from './modules/fields/fields.module';
+import { ViewsModule } from './modules/views/views.module';
+import { InsightsModule } from './modules/insights/insights.module';
+import { FormsModule } from './modules/forms/forms.module';
+import { CsvModule } from './modules/csv/csv.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -69,6 +75,12 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
     ActivityModule,
     RealtimeModule,
     JobsModule,
+    EmailModule,
+    FieldsModule,
+    ViewsModule,
+    InsightsModule,
+    FormsModule,
+    CsvModule,
     NotificationsModule,
     SearchModule,
     ReportsModule,

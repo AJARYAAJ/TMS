@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Send, Tag, Trash2, Webhook as WebhookIcon } from 'lucide-react';
+import { Copy, GitMerge, Send, Tag, Trash2, Webhook as WebhookIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Picker } from '@/components/ui/Picker';
+import { useCan } from '@/features/auth/session.store';
 import { FormEvent, useState } from 'react';
 import { EmptyState, LabelChip, SkeletonRows } from '@/components/ui';
 import { toast } from '@/components/ui/toast';
-import { useCreateLabel, useDeleteLabel, useLabels } from '@/features/tasks/api';
+import { useCreateLabel, useDeleteLabel, useLabels, useMergeLabel, useUpdateLabel } from '@/features/tasks/api';
 import { api, errorMessage } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
-import type { Webhook } from '@/types';
+import type { Label, Webhook } from '@/types';
 import { timeAgo } from '@/utils/format';
 
 const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#84cc16', '#64748b'];
@@ -14,46 +17,140 @@ const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'
 export function LabelsPanel() {
   const { data, isLoading } = useLabels();
   const create = useCreateLabel();
-  const remove = useDeleteLabel();
+  const canDelete = useCan('ADMIN');
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLORS[0]);
+  const [description, setDescription] = useState('');
+  const [q, setQ] = useState('');
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (name.trim()) create.mutate({ name: name.trim(), color }, { onSuccess: () => setName('') });
+    if (name.trim()) create.mutate({ name: name.trim(), color, description: description.trim() || undefined }, { onSuccess: () => { setName(''); setDescription(''); } });
   };
+  const shown = (data ?? []).filter((l) => !q || `${l.name} ${l.description ?? ''}`.toLowerCase().includes(q.toLowerCase()));
+  const unused = (data ?? []).filter((l) => !l.usage).length;
   return (
-    <section className="tile">
-      <h2>Labels</h2>
-      <p className="muted small">Labels are shared by every project in the workspace. Use them to filter lists and in automation conditions.</p>
-      <form className="inline-form" onSubmit={submit}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New label" aria-label="Label name" maxLength={40} />
+    <section className="tile labels-panel">
+      <div className="tile-head">
+        <h2>Labels</h2>
+        <span className="muted small">
+          {data?.length ?? 0} labels{unused ? ` · ${unused} unused` : ''}
+        </span>
+      </div>
+      <p className="muted small">Shared by every project. Filter lists and boards by label, use them in automations, and merge duplicates here.</p>
+      <form className="label-new" onSubmit={submit}>
+        <span className="label-preview" style={{ ['--lc' as any]: color }}>
+          <LabelChip label={{ name: name.trim() || 'new label', color }} />
+        </span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Label name" aria-label="Label name" maxLength={40} />
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is it for? (optional)" aria-label="Label description" maxLength={200} />
         <div className="swatches" role="radiogroup" aria-label="Label color">
           {COLORS.map((c) => (
-            <button type="button" key={c} role="radio" aria-checked={c === color} className={c === color ? 'on' : ''} style={{ background: c }} onClick={() => setColor(c)} />
+            <button type="button" key={c} role="radio" aria-checked={c === color} aria-label={c} className={c === color ? 'on' : ''} style={{ background: c }} onClick={() => setColor(c)} />
           ))}
         </div>
-        <button className="btn btn-volt btn-sm" disabled={create.isPending}>
+        <button className="btn btn-volt btn-sm" disabled={create.isPending || !name.trim()}>
           Add label
         </button>
       </form>
+      {(data?.length ?? 0) > 6 && <input className="filter-input label-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a label…" aria-label="Find a label" />}
       {isLoading ? (
         <SkeletonRows rows={3} />
       ) : !data?.length ? (
-        <EmptyState icon={<Tag size={26} />} title="No labels yet" />
+        <EmptyState icon={<Tag size={26} />} title="No labels yet">Create one above, or right from a task's label picker.</EmptyState>
       ) : (
         <ul className="label-admin">
-          {data.map((l) => (
-            <li key={l.id}>
-              <LabelChip label={l} />
-              <span className="muted small">{l.usage ?? 0} tasks</span>
-              <button className="icon-btn danger ml-auto" aria-label={`Delete ${l.name}`} onClick={() => confirm(`Delete label “${l.name}”? It will be removed from all tasks.`) && remove.mutate(l.id)}>
-                <Trash2 size={14} />
-              </button>
-            </li>
+          {shown.map((l) => (
+            <LabelRow key={l.id} label={l} all={data} canDelete={canDelete} />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function LabelRow({ label, all, canDelete }: { label: Label; all: Label[]; canDelete: boolean }) {
+  const update = useUpdateLabel();
+  const merge = useMergeLabel();
+  const remove = useDeleteLabel();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(label.name);
+  const [description, setDescription] = useState(label.description ?? '');
+  const [merging, setMerging] = useState(false);
+  const save = () => {
+    const patch: { id: string; name?: string; description?: string } = { id: label.id };
+    if (name.trim() && name.trim() !== label.name) patch.name = name.trim();
+    if (description.trim() !== (label.description ?? '')) patch.description = description.trim();
+    if (patch.name || patch.description !== undefined) update.mutate(patch, { onSuccess: () => setEditing(false) });
+    else setEditing(false);
+  };
+  return (
+    <li className={editing ? 'editing' : ''}>
+      <Picker
+        label={`Colour of ${label.name}`}
+        value={label.color}
+        options={COLORS.map((c) => ({ value: c, label: c, icon: <span className="cf-dot" style={{ background: c }} /> }))}
+        onChange={(c) => c && update.mutate({ id: label.id, color: c })}
+      >
+        <span className="label-dot" style={{ background: label.color }} />
+      </Picker>
+      {editing ? (
+        <form
+          className="label-edit"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={40} aria-label="Label name" />
+          <input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} placeholder="Description" aria-label="Label description" />
+          <button className="btn btn-volt btn-sm">Save</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button className="label-main" onClick={() => setEditing(true)} title="Rename or describe">
+          <LabelChip label={label} />
+          <span className="muted small ellipsis">{label.description || 'Add a description…'}</span>
+        </button>
+      )}
+      <Link to={`/labels/${label.id}`} className="label-usage" title="See every task with this label">
+        {label.openUsage ?? 0} open / {label.usage ?? 0}
+      </Link>
+      {canDelete && (
+        <span className="row-tools">
+          {merging ? (
+            <select
+              autoFocus
+              value=""
+              aria-label={`Merge ${label.name} into`}
+              onBlur={() => setMerging(false)}
+              onChange={(e) => {
+                const into = all.find((x) => x.id === e.target.value);
+                if (into && confirm(`Merge “${label.name}” into “${into.name}”? Tasks keep “${into.name}” and “${label.name}” is deleted.`)) merge.mutate({ id: label.id, into: into.id });
+                setMerging(false);
+              }}
+            >
+              <option value="">Merge into…</option>
+              {all
+                .filter((x) => x.id !== label.id)
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <button className="icon-btn" title="Merge into another label" aria-label={`Merge ${label.name}`} onClick={() => setMerging(true)}>
+              <GitMerge size={14} />
+            </button>
+          )}
+          <button className="icon-btn danger" aria-label={`Delete ${label.name}`} onClick={() => confirm(`Delete label “${label.name}”? It will be removed from all tasks.`) && remove.mutate(label.id)}>
+            <Trash2 size={14} />
+          </button>
+        </span>
+      )}
+    </li>
   );
 }
 

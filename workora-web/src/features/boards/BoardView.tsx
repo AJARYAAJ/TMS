@@ -16,6 +16,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, CheckSquare, Clock, GitPullRequest, MessageSquare, Plus, Repeat } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { Search, X } from 'lucide-react';
+import { useSession } from '@/features/auth/session.store';
+import { useUsers } from '@/features/projects/api';
+import { useLabels } from '@/features/tasks/api';
+import { TASK_PRIORITIES } from '@/types';
+import { PRIORITY_LABEL } from '@/utils/format';
 import { useUiStore } from '@/app/ui.store';
 import { Avatar, formatMinutes, LabelChip, PriorityIcon, Skeleton, TypeIcon } from '@/components/ui';
 import { useCan } from '@/features/auth/session.store';
@@ -39,6 +45,8 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
   const canEdit = useCan('MEMBER');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const snapshot = useRef<Board | undefined>(undefined);
+  const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
+  const me = useSession()?.user.id;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -105,6 +113,7 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
     const position = serverPosition(column.tasks, index, original, column.state.id);
     if (column.state.id === original.stateId && position === original.position) return;
 
+    useUiStore.getState().markOnboarding('board');
     const rollbackTo = before;
     move.mutate({ task: original, stateId: column.state.id, position, rollback: () => qc.setQueryData(queryKey, rollbackTo) });
   };
@@ -115,13 +124,16 @@ export function BoardView({ projectId, sprintId, emptyHint }: { projectId: strin
   };
 
   const total = board.columns.reduce((n, c) => n + c.tasks.length, 0);
+  const visible = (t: Task) => matches(t, filter, me);
+  const shown = board.columns.reduce((n, c) => n + c.tasks.filter(visible).length, 0);
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
       {total === 0 && emptyHint && <p className="muted small board-hint">{emptyHint}</p>}
+      {total > 0 && <BoardFilterBar filter={filter} onChange={setFilter} shown={shown} total={total} />}
       <div className="board">
         {board.columns.map((col) => (
-          <Column key={col.state.id} projectId={projectId} sprintId={sprintId} state={col.state} tasks={col.tasks} canEdit={canEdit} />
+          <Column key={col.state.id} projectId={projectId} sprintId={sprintId} state={col.state} tasks={col.tasks.filter(visible)} total={col.tasks.length} canEdit={canEdit} />
         ))}
       </div>
       <DragOverlay>{activeTask ? <Card task={activeTask} overlay /> : null}</DragOverlay>
@@ -143,17 +155,18 @@ function serverPosition(tasks: Task[], index: number, original: Task, stateId: s
   return 0;
 }
 
-function Column({ projectId, sprintId, state, tasks, canEdit }: { projectId: string; sprintId?: string; state: WorkflowState; tasks: Task[]; canEdit: boolean }) {
+function Column({ projectId, sprintId, state, tasks, total, canEdit }: { projectId: string; sprintId?: string; state: WorkflowState; tasks: Task[]; total: number; canEdit: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId(state.id), data: { type: 'column' } });
   const openCreateTask = useUiStore((s) => s.openCreateTask);
-  const overLimit = state.wipLimit !== null && tasks.length > state.wipLimit;
+  // WIP limits always count the whole column, not just the filtered cards.
+  const overLimit = state.wipLimit !== null && total > state.wipLimit;
   return (
     <section className={`board-column${isOver ? ' over' : ''}${overLimit ? ' over-limit' : ''}`} aria-label={state.name} style={{ ['--st' as any]: state.color }}>
       <header className="board-column-header" title={`${state.name} · ${STATUS_LABEL[state.category]} category${state.wipLimit ? ` · WIP limit ${state.wipLimit}` : ''}`}>
         <span className="status-dot" />
         <span className="ellipsis">{state.name}</span>
         <span className={`count${overLimit ? ' count-danger' : ''}`} title={state.wipLimit ? `WIP limit ${state.wipLimit}` : undefined}>
-          {tasks.length}
+          {tasks.length !== total ? `${tasks.length} of ${total}` : total}
           {state.wipLimit ? ` / ${state.wipLimit}` : ''}
         </span>
         {canEdit && (
@@ -242,6 +255,78 @@ function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
         </span>
       </div>
     </article>
+  );
+}
+
+interface BoardFilter {
+  q: string;
+  assignee: string;
+  label: string;
+  priority: string;
+}
+const EMPTY_FILTER: BoardFilter = { q: '', assignee: '', label: '', priority: '' };
+
+function matches(t: Task, f: BoardFilter, me?: string) {
+  if (f.q && !`${t.key} ${t.title}`.toLowerCase().includes(f.q.toLowerCase())) return false;
+  if (f.assignee === 'me' && t.assignee?.id !== me) return false;
+  if (f.assignee === 'none' && t.assignee) return false;
+  if (f.assignee && f.assignee !== 'me' && f.assignee !== 'none' && t.assignee?.id !== f.assignee) return false;
+  if (f.label && !t.labels.some((l) => l.id === f.label)) return false;
+  if (f.priority && t.priority !== f.priority) return false;
+  return true;
+}
+
+/** Quick filters for the board (client-side, instant): search, assignee, label, priority. */
+function BoardFilterBar({ filter, onChange, shown, total }: { filter: BoardFilter; onChange: (f: BoardFilter) => void; shown: number; total: number }) {
+  const { data: users } = useUsers();
+  const { data: labels } = useLabels();
+  const active = JSON.stringify(filter) !== JSON.stringify(EMPTY_FILTER);
+  const set = (k: keyof BoardFilter) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...filter, [k]: e.target.value });
+  return (
+    <div className="board-filters" role="search">
+      <span className="bf-search">
+        <Search size={13} />
+        <input value={filter.q} onChange={set('q')} placeholder="Filter cards…" aria-label="Filter cards" />
+      </span>
+      <button className={`chip-btn${filter.assignee === 'me' ? ' on' : ''}`} aria-pressed={filter.assignee === 'me'} onClick={() => onChange({ ...filter, assignee: filter.assignee === 'me' ? '' : 'me' })}>
+        Only my cards
+      </button>
+      <select value={filter.assignee === 'me' ? '' : filter.assignee} onChange={set('assignee')} aria-label="Board assignee filter">
+        <option value="">Anyone</option>
+        <option value="none">Unassigned</option>
+        {users?.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name}
+          </option>
+        ))}
+      </select>
+      <select value={filter.label} onChange={set('label')} aria-label="Board label filter">
+        <option value="">Any label</option>
+        {labels?.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+      <select value={filter.priority} onChange={set('priority')} aria-label="Board priority filter">
+        <option value="">Any priority</option>
+        {TASK_PRIORITIES.map((p) => (
+          <option key={p} value={p}>
+            {PRIORITY_LABEL[p]}
+          </option>
+        ))}
+      </select>
+      {active && (
+        <>
+          <span className="muted small">
+            {shown} of {total} cards
+          </span>
+          <button className="icon-btn" aria-label="Clear board filters" onClick={() => onChange(EMPTY_FILTER)}>
+            <X size={14} />
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 # Local infrastructure for Workora: PostgreSQL (source of truth) and Redis
-# (rate limiting, job queue, realtime fan-out).
+# (rate limiting, job queue, realtime fan-out), plus Mailpit to catch dev email
+# (SMTP on :1025, inbox UI on http://localhost:8025).
 services:
   postgres:
     image: postgres:16-alpine
@@ -21,6 +22,10 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ['1025:1025', '8025:8025']
 
 volumes:
   pgdata:

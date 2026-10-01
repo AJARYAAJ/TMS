@@ -3,6 +3,7 @@ import { ArrowUpRight, Play, Square } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Avatar, EmptyState, formatMinutes, PriorityIcon, Ring, Skeleton, SkeletonRows, StatusBadge } from '@/components/ui';
 import { useSession } from '@/features/auth/session.store';
+import { GetStarted } from '@/features/explore/GetStarted';
 import { useGoals } from '@/features/goals/api';
 import { useProjects } from '@/features/projects/api';
 import { useRunningTimer, useTimer } from '@/features/tasks/api';
@@ -60,6 +61,8 @@ export default function DashboardPage() {
           </p>
           {focus && <FocusCard task={focus} />}
         </section>
+
+        <GetStarted />
 
         <Stat label="Open" value={data?.openTasks} to="/my-work" loading={isLoading} />
         <Stat label="Overdue" value={data?.overdue} to="/my-work?filter=overdue" loading={isLoading} tone={data?.overdue ? 'danger' : undefined} />

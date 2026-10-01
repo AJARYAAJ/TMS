@@ -1,9 +1,11 @@
 import { Trash2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Avatar, SkeletonRows, Spinner } from '@/components/ui';
 import { useCan, useSession } from '@/features/auth/session.store';
 import { TeamsPanel } from '@/features/teams/TeamsPage';
 import { IntegrationsPanel, LabelsPanel } from './ExtraPanels';
+import { EmailPanel } from './EmailPanel';
 import { GithubCard, SlackCard } from './IntegrationCards';
 import { ApiError, errorMessage } from '@/services/api/client';
 import type { Role } from '@/types';
@@ -14,7 +16,10 @@ const ROLES: Role[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
 /** Administration module (lazy-loaded): members, roles (RBAC) and teams. */
 export default function AdminPage() {
-  const [tab, setTab] = useState<'members' | 'teams' | 'labels' | 'integrations'>('members');
+  type Tab = 'members' | 'teams' | 'labels' | 'integrations' | 'email';
+  const [params, setParams] = useSearchParams();
+  const tab = (['members', 'teams', 'labels', 'integrations', 'email'].includes(params.get('tab') ?? '') ? params.get('tab') : 'members') as Tab;
+  const setTab = (t: Tab) => setParams(t === 'members' ? {} : { tab: t }, { replace: true });
   const session = useSession()!;
   return (
     <div className="page">
@@ -37,9 +42,14 @@ export default function AdminPage() {
         <button role="tab" aria-selected={tab === 'integrations'} className={tab === 'integrations' ? 'active' : ''} onClick={() => setTab('integrations')}>
           Integrations
         </button>
+        <button role="tab" aria-selected={tab === 'email'} className={tab === 'email' ? 'active' : ''} onClick={() => setTab('email')}>
+          Email
+        </button>
       </div>
       {tab === 'members' ? <Members /> : tab === 'teams' ? <TeamsPanel /> : tab === 'labels' ? (
         <LabelsPanel />
+      ) : tab === 'email' ? (
+        <EmailPanel />
       ) : (
         <div className="int-stack">
           <SlackCard />

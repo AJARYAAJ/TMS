@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject, Injectable, Logger, Module, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DataSource, In, IsNull } from 'typeorm';
@@ -7,7 +7,11 @@ import { AuthPrincipal } from '../../common/auth/principal';
 import { DOMAIN_EVENT, DomainEvent } from '../../common/events/domain-events';
 import { paginated } from '../../common/http/api-response';
 import { ApiException } from '../../common/http/api-exception';
+import { APP_CONFIG, AppConfig } from '../../config';
+import { EmailCategory, wantsEmail } from '../email/email-prefs';
+import { taskUrl } from '../integrations/shared';
 import { JobScheduler, JobsModule } from '../jobs/jobs.module';
+import { Organization } from '../organizations/organization.entity';
 import { rooms, RealtimeGateway } from '../realtime/realtime.gateway';
 import { Task } from '../tasks/task.entity';
 import { User } from '../users/user.entity';
@@ -18,7 +22,8 @@ interface Draft {
   type: string;
   title: string;
   body?: string;
-  email?: boolean;
+  /** Email category; the recipient's preferences decide whether it is sent. */
+  email?: EmailCategory;
 }
 
 /** One notification per user per event (a mention wins over a plain "commented"). */
@@ -52,6 +57,7 @@ export class NotificationListener {
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeGateway,
     private readonly jobs: JobScheduler,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @OnEvent(DOMAIN_EVENT, { async: true, promisify: true })
@@ -87,7 +93,7 @@ export class NotificationListener {
           data: toNotificationDto(n),
         });
       }
-      await this.queueEmails(drafts.filter((d) => d.email));
+      await this.queueEmails(e, drafts.filter((d) => d.email));
     } catch (err) {
       this.logger.error(`Failed to create notifications for ${e.type}`, err instanceof Error ? err.stack : err);
     }
@@ -98,12 +104,12 @@ export class NotificationListener {
     const d = e.data;
     switch (e.type) {
       case 'TASK_ASSIGNED':
-        return d.task.assignee ? [{ userId: d.task.assignee.id, type: e.type, title: `${who} assigned ${d.task.key} to you`, body: d.task.title, email: true }] : [];
+        return d.task.assignee ? [{ userId: d.task.assignee.id, type: e.type, title: `${who} assigned ${d.task.key} to you`, body: d.task.title, email: 'assigned' }] : [];
       case 'COMMENT_CREATED': {
         const mentioned = new Set<string>(d.mentionedUserIds);
-        const drafts: Draft[] = [...mentioned].map((userId) => ({ userId, type: 'MENTIONED', title: `${who} mentioned you in ${d.task.key}`, body: d.comment.body.slice(0, 280), email: true }));
+        const drafts: Draft[] = [...mentioned].map((userId) => ({ userId, type: 'MENTIONED', title: `${who} mentioned you in ${d.task.key}`, body: d.comment.body.slice(0, 280), email: 'mentioned' }));
         const watchers = (await this.watcherIds(d.task.id, [d.task.assignee?.id, d.task.reporter?.id])).filter((id) => !mentioned.has(id));
-        for (const userId of watchers) drafts.push({ userId, type: e.type, title: `${who} commented on ${d.task.key}`, body: d.comment.body.slice(0, 280) });
+        for (const userId of watchers) drafts.push({ userId, type: e.type, title: `${who} commented on ${d.task.key}`, body: d.comment.body.slice(0, 280), email: 'comments' });
         return drafts;
       }
       case 'TASK_UPDATED': {
@@ -112,20 +118,20 @@ export class NotificationListener {
         const status = String(d.changes.status.to).replace(/_/g, ' ').toLowerCase();
         return (await this.watcherIds(d.task.id, [d.task.reporter?.id]))
           .filter((id) => id !== assignee || !!e.actor?.automation)
-          .map((userId) => ({ userId, type: 'TASK_STATUS_CHANGED', title: `${who} moved ${d.task.key} to ${status}`, body: d.task.title }));
+          .map((userId) => ({ userId, type: 'TASK_STATUS_CHANGED', title: `${who} moved ${d.task.key} to ${status}`, body: d.task.title, email: 'status' as const }));
       }
       case 'TASK_OVERDUE':
-        return d.task.assignee ? [{ userId: d.task.assignee.id, type: e.type, title: `${d.task.key} is overdue`, body: `${d.task.title} was due ${d.task.dueDate}`, email: true }] : [];
+        return d.task.assignee ? [{ userId: d.task.assignee.id, type: e.type, title: `${d.task.key} is overdue`, body: `${d.task.title} was due ${d.task.dueDate}`, email: 'overdue' }] : [];
       case 'AUTOMATION_RAN':
-        return (d.notify as { userIds: string[]; message: string }[]).flatMap((n) => n.userIds.map((userId) => ({ userId, type: 'AUTOMATION', title: n.message, body: `${d.automation.name} · ${d.task.key}` })));
+        return (d.notify as { userIds: string[]; message: string }[]).flatMap((n) => n.userIds.map((userId) => ({ userId, type: 'AUTOMATION', title: n.message, body: `${d.automation.name} · ${d.task.key}`, email: 'automation' as const })));
       case 'SPRINT_STARTED':
       case 'SPRINT_COMPLETED': {
         const assignees = await this.dataSource.getRepository(Task).find({ select: { assigneeId: true }, where: { sprintId: d.sprint.id } });
         const verb = e.type === 'SPRINT_STARTED' ? 'started' : 'completed';
-        return [...new Set(assignees.map((t) => t.assigneeId).filter((id): id is string => !!id))].map((userId) => ({ userId, type: e.type, title: `${d.sprint.name} ${verb}`, body: d.sprint.goal }));
+        return [...new Set(assignees.map((t) => t.assigneeId).filter((id): id is string => !!id))].map((userId) => ({ userId, type: e.type, title: `${d.sprint.name} ${verb}`, body: d.sprint.goal, email: 'sprints' as const }));
       }
       case 'USER_ADDED':
-        return [{ userId: d.user.id, type: e.type, title: `${who} added you to the organization`, body: `Your role: ${d.role}` }];
+        return [{ userId: d.user.id, type: e.type, title: `${who} added you to the organization`, body: `Your role: ${d.role}`, email: 'workspace' }];
       default:
         return [];
     }
@@ -136,13 +142,28 @@ export class NotificationListener {
     return [...new Set([...rows.map((r) => r.user_id), ...extra.filter((x): x is string => !!x)])];
   }
 
-  private async queueEmails(drafts: Draft[]) {
+  /** Queues one email per draft whose recipient wants that category (re-checked at send time). */
+  private async queueEmails(e: DomainEvent, drafts: Draft[]) {
     if (!drafts.length) return;
-    const users = await this.dataSource.getRepository(User).findBy({ id: In(drafts.map((d) => d.userId)) });
-    const emails = new Map(users.map((u) => [u.id, u.email]));
-    for (const d of drafts) {
-      const to = emails.get(d.userId);
-      if (to) await this.jobs.enqueueEmail({ to, subject: d.title, body: d.body ?? '' });
+    const users = await this.dataSource.getRepository(User).find({ where: { id: In(drafts.map((d) => d.userId)) }, select: { id: true, emailPrefs: true } });
+    const prefs = new Map(users.map((u) => [u.id, u.emailPrefs]));
+    const wanted = drafts.filter((d) => prefs.has(d.userId) && wantsEmail(prefs.get(d.userId), d.email!));
+    if (!wanted.length) return;
+    const org = await this.dataSource.getRepository(Organization).findOneBy({ id: e.organizationId });
+    const task = e.data?.task as { key: string; title: string } | undefined;
+    for (const d of wanted) {
+      await this.jobs.enqueueEmail({
+        organizationId: e.organizationId,
+        userId: d.userId,
+        category: d.email!,
+        subject: task && !d.title.includes(task.key) ? `[${task.key}] ${d.title}` : d.title,
+        heading: d.title,
+        body: d.body && d.body !== task?.title ? d.body : undefined,
+        actorName: e.actor?.name ?? null,
+        orgName: org?.name ?? 'Workora',
+        task: task ? { key: task.key, title: task.title } : null,
+        url: task ? taskUrl(this.config.appUrl, task.key) : `${this.config.appUrl}/inbox`,
+      });
     }
   }
 }

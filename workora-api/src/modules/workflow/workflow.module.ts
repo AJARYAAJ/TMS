@@ -131,6 +131,12 @@ export class WorkflowService {
           [state.id, target.id, target.category],
         );
       }
+      // Trashed tasks (not visible through the tasks view) follow the live ones, so restoring them later works.
+      const [fallback] = moveTo && isUuid(moveTo) ? [{ id: moveTo }] : await m.query('SELECT id FROM workflow_states WHERE project_id = $1 AND id <> $2 ORDER BY position LIMIT 1', [state.projectId, state.id]);
+      await m.query(
+        `UPDATE tasks_all SET state_id = $2::uuid, status = (SELECT category FROM workflow_states WHERE id = $2::uuid) WHERE state_id = $1 AND deleted_at IS NOT NULL`,
+        [state.id, fallback.id],
+      );
       await m.delete(WorkflowState, { id: state.id });
       const rest = await m.find(WorkflowState, { where: { projectId: state.projectId }, order: { position: 'ASC' } });
       for (const [i, st] of rest.entries()) if (st.position !== i) await m.update(WorkflowState, { id: st.id }, { position: i });

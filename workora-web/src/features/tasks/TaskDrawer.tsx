@@ -62,6 +62,7 @@ import {
   useWorkflow,
 } from './api';
 import { useOpenTask, useOpenTaskKey } from './useOpenTask';
+import { CustomFieldsSection } from '@/features/fields/FieldValues';
 
 /** Task sheet: floats over the current screen (no navigation) and edits everything inline. */
 export function TaskDrawer() {
@@ -137,13 +138,12 @@ function TaskDetails({ taskKey, onClose }: { taskKey: string; onClose: () => voi
             {canEdit && (
               <button
                 className="icon-btn danger"
-                title="Delete task"
+                title="Move to trash"
                 aria-label="Delete task"
                 onClick={() => {
-                  if (confirm(`Delete ${task.key}? This cannot be undone.`)) {
-                    del.mutate(task);
-                    onClose();
-                  }
+                  // Goes to the trash with an Undo toast, so no confirmation step.
+                  del.mutate(task);
+                  onClose();
                 }}
               >
                 <Trash2 size={16} />
@@ -180,6 +180,7 @@ function TaskDetails({ taskKey, onClose }: { taskKey: string; onClose: () => voi
         <DescriptionEditor task={task} disabled={!canEdit} onSave={(description) => save({ description })} />
       </section>
 
+      <CustomFieldsSection task={task} canEdit={canEdit} onSave={(patch, optimistic) => save(patch, optimistic)} />
       <Subtasks task={task} canEdit={canEdit} />
       <Dependencies task={task} canEdit={canEdit} />
       <Development task={task} />

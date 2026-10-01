@@ -10,20 +10,8 @@ import { toSprintDto } from '../sprints/sprints.module';
 import { Task } from '../tasks/task.entity';
 import { toTaskDtos } from '../tasks/tasks.service';
 import { In } from 'typeorm';
-import { JobNames, JOBS_QUEUE, NotificationEmailJob, ProjectSetupJob } from './jobs.constants';
-
-/** Email transport. Logs by default; swap for SMTP / SES / SendGrid in production. */
-@Injectable()
-export class EmailService {
-  private readonly logger = new Logger(EmailService.name);
-  readonly sent: NotificationEmailJob[] = [];
-
-  async send(mail: NotificationEmailJob) {
-    this.sent.push(mail);
-    if (this.sent.length > 100) this.sent.shift();
-    this.logger.log(`✉  to=${mail.to} subject="${mail.subject}"`);
-  }
-}
+import { EmailModule, EmailService, NotificationEmailJob } from '../email/email.module';
+import { JobNames, JOBS_QUEUE, ProjectSetupJob } from './jobs.constants';
 
 /** Kicks off background work in response to domain events so API responses stay fast. */
 @Injectable()
@@ -33,6 +21,8 @@ export class JobScheduler implements OnApplicationBootstrap {
   /** Recurring job: remind assignees about overdue work every 15 minutes. */
   async onApplicationBootstrap() {
     await this.queue.upsertJobScheduler('overdue-scan', { every: 15 * 60_000 }, { name: JobNames.OVERDUE_SCAN, opts: { removeOnComplete: 50, removeOnFail: 50 } });
+    // Trash retention: tasks stay restorable for 30 days.
+    await this.queue.upsertJobScheduler('trash-purge', { every: 6 * 60 * 60_000 }, { name: JobNames.TRASH_PURGE, opts: { removeOnComplete: 20, removeOnFail: 20 } });
   }
 
   @OnEvent(DOMAIN_EVENT, { async: true })
@@ -48,6 +38,7 @@ export class JobScheduler implements OnApplicationBootstrap {
     }
   }
 
+  /** Retries transient SMTP failures with backoff (2s, 4s, 8s, 16s); 5xx rejections fail at once. */
   enqueueEmail(mail: NotificationEmailJob) {
     return this.queue.add(JobNames.NOTIFICATION_EMAIL, mail, { attempts: 5, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: 1000, removeOnFail: 5000 });
   }
@@ -70,9 +61,11 @@ export class JobsProcessor extends WorkerHost {
       case JobNames.PROJECT_SETUP:
         return this.setupProject(job.data as ProjectSetupJob);
       case JobNames.NOTIFICATION_EMAIL:
-        return this.email.send(job.data as NotificationEmailJob);
+        return this.email.deliver(job.data as NotificationEmailJob, job.attemptsMade + 1, job.opts.attempts ?? 1);
       case JobNames.OVERDUE_SCAN:
         return this.scanOverdue();
+      case JobNames.TRASH_PURGE:
+        return this.purgeTrash();
       default:
         this.logger.warn(`Unknown job ${job.name}`);
     }
@@ -98,6 +91,12 @@ export class JobsProcessor extends WorkerHost {
     return { overdue: ids.length };
   }
 
+  /** Permanently removes tasks that have been in the trash for more than 30 days. */
+  async purgeTrash() {
+    const [, purged] = await this.dataSource.query(`DELETE FROM tasks_all WHERE deleted_at < now() - interval '30 days'`);
+    return { purged };
+  }
+
   /** Default project scaffolding: the first sprint (board columns come from the default workflow). */
   private async setupProject({ organizationId, projectId }: ProjectSetupJob) {
     const repo = this.dataSource.getRepository(Sprint);
@@ -109,8 +108,8 @@ export class JobsProcessor extends WorkerHost {
 }
 
 @Module({
-  imports: [BullModule.registerQueue({ name: JOBS_QUEUE })],
-  providers: [EmailService, JobScheduler, JobsProcessor],
-  exports: [JobScheduler, EmailService],
+  imports: [BullModule.registerQueue({ name: JOBS_QUEUE }), EmailModule],
+  providers: [JobScheduler, JobsProcessor],
+  exports: [JobScheduler],
 })
 export class JobsModule {}

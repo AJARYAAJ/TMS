@@ -44,9 +44,15 @@ subscribers. Modules talk to each other through the event bus rather than callin
 | `comments` | comments with `@mentions` |
 | `attachments`, `storage` | signed-URL uploads and downloads |
 | `activity` | append-only audit log built from domain events |
-| `notifications` | who-should-know rules, in-app inbox, email jobs |
+| `notifications` | who-should-know rules, in-app inbox, queues emails by category |
+| `email` | SMTP transport, templates, per-user preferences, unsubscribe tokens, delivery log |
+| `fields` | per-project custom field definitions; values live in `tasks.custom_values` (jsonb) |
+| `views` | saved List views (personal or shared) |
+| `insights` | sprint burndown, velocity, workload & capacity |
+| `forms` | public intake forms whose responses become tasks |
+| `csv` | CSV export and mapped import |
 | `realtime` | socket.io gateway + relay of domain events to rooms |
-| `jobs` | BullMQ queue + worker (project setup, email) |
+| `jobs` | BullMQ queue + worker (project setup, email delivery, overdue scan) |
 | `search` | PostgreSQL full-text search across tasks, projects, people, comments |
 | `reports` | dashboard (incl. completion heatmap) and project analytics |
 | `labels` | organization-wide labels |
@@ -118,6 +124,65 @@ be checked byte-for-byte.
   rank. `fixes/closes/resolves KEY` on the default branch and closed linked issues complete tasks. New issues
   can create tasks (a `bug` label makes them bugs). Changes are attributed to e.g. "octocat via GitHub".
 
+### Custom fields
+
+Definitions are `custom_fields` rows per project (type, options with stable ids, position, required, shown in List).
+Values are stored on the task as `custom_values` jsonb keyed by field id, so a task carries its values without
+joins and the List can filter with jsonb containment: `?cf={"<fieldId>": value}` becomes
+`custom_values -> fieldId @> value`, which matches equal scalars and multi-select arrays that contain the value
+(a GIN index backs it). Values are validated per type on write; select values accept option ids or labels
+(case-insensitive), which is what CSV import and forms use. Renaming an option keeps its id; removing one prunes it
+from tasks; deleting a field removes its key from every task.
+
+### Trash (soft delete)
+
+The real table is `tasks_all`; `tasks` is an automatically updatable Postgres view of the rows where
+`deleted_at IS NULL`. Every existing query — TypeORM entities, raw SQL, joins in reports and search — therefore
+skips trashed tasks with no changes, while foreign keys and indexes stay on the table. Deleting a task stamps
+`deleted_at` on it and its subtasks in one statement; restore and purge find that batch by the same timestamp
+(compared in SQL, since Postgres keeps microseconds). A job purges rows older than 30 days. **A migration that adds
+columns to `tasks_all` must recreate the view** (`CREATE OR REPLACE VIEW tasks AS SELECT * FROM tasks_all WHERE
+deleted_at IS NULL`).
+
+### Insights
+
+- *Burndown*: the sprint's tasks, valued in story points (or 1 per task when unpointed), minus what was completed by
+  each day; a completed sprint uses its committed total from `sprints.completion_stats`, a snapshot taken when the
+  sprint completes (unfinished tasks go back to the backlog and would otherwise vanish from the scope).
+- *Velocity*: committed vs completed from those snapshots for the last 8 sprints.
+- *Workload*: each open task's estimate is spread evenly over the working days from its start (or due) date to its
+  due date; days before the window (overdue work) count in the first week; tasks without a due date are
+  "unscheduled". Capacity is `memberships.weekly_capacity_minutes`.
+
+### Forms and CSV import
+
+Both create tasks through `TasksService.create`, so validation, numbering, events, automations, notifications and
+webhooks behave exactly as for tasks created in the UI. Form submissions act as the form's creator with the display
+name "<name> via form"; a hidden honeypot field silently drops bot submissions. CSV import parses RFC 4180 (quotes,
+embedded newlines, BOM, `,`/`;`/tab), maps headers through a synonym table (Jira, Asana, Trello, ClickUp, Linear),
+runs as a dry run first to report row errors and warnings, creates missing labels, and links parents either to
+existing keys or to other rows of the same file via its key column. Export neutralises spreadsheet formulas.
+
+### Email
+
+`NotificationListener` gives each notification draft an email *category* (`assigned`, `mentioned`, `overdue`,
+`automation`, `workspace`, `comments`, `status`, `sprints`). For recipients whose preferences allow it, it queues a
+`notification.email` job. Preferences are stored as sparse overrides in `users.email_prefs` and merged with
+per-category defaults. The job processor calls `EmailService.deliver`, which:
+
+1. re-checks preferences, so an unsubscribe also stops mail that is already queued;
+2. renders the HTML (table layout with inline styles, all user text escaped) and plain-text versions;
+3. sends through a pooled nodemailer SMTP transport, or a JSON transport that only logs when SMTP is not configured;
+4. records the final outcome in `email_deliveries`.
+
+5xx rejections fail immediately (`UnrecoverableError`). 4xx and network errors retry with exponential backoff,
+up to 5 attempts.
+
+Unsubscribe tokens are `base64url(userId:category).HMAC` under a key derived from `JWT_SECRET`. They don't
+expire and can only turn email off. Emails link to the SPA's `/unsubscribe` confirmation page (a GET changes
+nothing, so link scanners are harmless). They also carry `List-Unsubscribe` / `List-Unsubscribe-Post` headers
+pointing at `POST /api/v1/email/unsubscribe` for RFC 8058 one-click unsubscribes.
+
 ### Board ordering
 
 Each task has a dense, zero-based `position` within its `(project, workflow state)` column.
@@ -130,7 +195,8 @@ columns' positions. That serializes concurrent drags within a project.
 `TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_DELETED`, `TASK_LINKED`, `TASK_OVERDUE`,
 `COMMENT_CREATED`, `ATTACHMENT_ADDED`, `ATTACHMENT_DELETED`, `TIME_LOGGED`, `PROJECT_CREATED`, `PROJECT_UPDATED`,
 `SPRINT_CREATED`, `SPRINT_UPDATED`, `SPRINT_STARTED`, `SPRINT_COMPLETED`, `DOCUMENT_CREATED`, `DOCUMENT_UPDATED`,
-`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`, `DEV_LINKED`.
+`DOCUMENT_DELETED`, `GOAL_CREATED`, `GOAL_UPDATED`, `AUTOMATION_RAN`, `USER_ADDED`, `DEV_LINKED`, `FIELDS_UPDATED`,
+`VIEWS_UPDATED`, `TASK_RESTORED`, `TASKS_IMPORTED`.
 
 ### Automations
 

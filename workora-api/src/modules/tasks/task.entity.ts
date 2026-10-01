@@ -60,6 +60,14 @@ export class Task {
   @Column({ type: 'uuid', nullable: true }) parentId: string | null;
   @Column({ type: 'int', nullable: true }) estimateMinutes: number | null;
   @Column({ type: 'timestamptz', nullable: true, select: false }) overdueNotifiedAt: Date | null;
+  /** Custom field values keyed by custom field id. */
+  @Column({ type: 'jsonb', default: {} }) customValues: Record<string, string | number | boolean | string[]>;
+  /**
+   * Set when the task is in the trash. `tasks` is a view over live rows (see migration
+   * WorkManagementPlus), so this is always null here; trash code reads `tasks_all`.
+   */
+  @Column({ type: 'timestamptz', nullable: true, select: false }) deletedAt: Date | null;
+  @Column({ type: 'uuid', nullable: true }) deletedById: string | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
   @VersionColumn() version: number;

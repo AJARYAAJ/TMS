@@ -6,6 +6,8 @@ export class User {
   @Column({ unique: true }) email: string;
   @Column() name: string;
   @Column({ select: false }) passwordHash: string;
+  /** Overrides of the default email preferences (see modules/email/email-prefs.ts). */
+  @Column({ type: 'jsonb', default: {}, select: false }) emailPrefs: Record<string, boolean>;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
 }
 

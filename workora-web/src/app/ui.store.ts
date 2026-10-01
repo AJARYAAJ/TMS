@@ -25,6 +25,13 @@ interface UiState {
   openCreateTask: (intent?: CreateTaskIntent) => void;
   closeCreateTask: () => void;
   setCreateProject: (open: boolean) => void;
+  shortcutsOpen: boolean;
+  setShortcuts: (open: boolean) => void;
+  /** Onboarding checklist: dismissed, and steps the user ticked by hand. */
+  onboardingHidden: boolean;
+  onboardingDone: string[];
+  hideOnboarding: (hidden: boolean) => void;
+  markOnboarding: (step: string) => void;
 }
 
 /** Pure UI state — never mixed with server data (that lives in the query cache). */
@@ -44,7 +51,16 @@ export const useUiStore = create<UiState>()(
       openCreateTask: (intent = {}) => set({ createTask: intent, commandPaletteOpen: false }),
       closeCreateTask: () => set({ createTask: null }),
       setCreateProject: (createProjectOpen) => set({ createProjectOpen, commandPaletteOpen: false }),
+      shortcutsOpen: false,
+      setShortcuts: (shortcutsOpen) => set({ shortcutsOpen, commandPaletteOpen: false }),
+      onboardingHidden: false,
+      onboardingDone: [],
+      hideOnboarding: (onboardingHidden) => set({ onboardingHidden }),
+      markOnboarding: (step) => set((s) => (s.onboardingDone.includes(step) ? s : { onboardingDone: [...s.onboardingDone, step] })),
     }),
-    { name: 'workora.ui', partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed, theme: s.theme }) },
+    {
+      name: 'workora.ui',
+      partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed, theme: s.theme, onboardingHidden: s.onboardingHidden, onboardingDone: s.onboardingDone }),
+    },
   ),
 );

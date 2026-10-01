@@ -14,6 +14,11 @@ import {
   Moon,
   Plus,
   Settings,
+  Settings2,
+  Compass,
+  Gauge,
+  Keyboard,
+  Trash2,
   Square,
   Sun,
   Target,
@@ -21,11 +26,12 @@ import {
   Zap,
 } from 'lucide-react';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Avatar, Skeleton } from '@/components/ui';
 import { useSignOut, useSwitchOrganization } from '@/features/auth/api';
 import { useCan, useSession } from '@/features/auth/session.store';
 import { CommandPalette } from '@/features/command-palette/CommandPalette';
+import { ShortcutsLayer } from '@/features/explore/Shortcuts';
 import { useNotifications } from '@/features/notifications/api';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
 import { CreateProjectDialog } from '@/features/projects/CreateProjectDialog';
@@ -68,10 +74,12 @@ function Dock() {
         {item('/roadmap', <Map size={19} />, 'Roadmap')}
         {item('/goals', <Target size={19} />, 'Goals')}
         {item('/docs', <FileText size={19} />, 'Docs')}
+        {item('/workload', <Gauge size={19} />, 'Workload')}
         {item('/time', <Clock size={19} />, 'Time')}
         {item('/reports', <BarChart3 size={19} />, 'Reports')}
         {item('/teams', <Users size={19} />, 'Teams')}
         {canAdmin && item('/admin', <Settings size={19} />, 'Admin')}
+        {item('/explore', <Compass size={19} />, 'Explore')}
       </div>
       {favorites.length > 0 && (
         <div className="dock-group dock-projects">
@@ -181,6 +189,15 @@ function UserMenu() {
             ))}
           </div>
           <div className="menu-divider" />
+          <Link className="menu-item" role="menuitem" to="/settings" onClick={() => setOpen(false)}>
+            <Settings2 size={14} /> Notification settings
+          </Link>
+          <Link className="menu-item" role="menuitem" to="/trash" onClick={() => setOpen(false)}>
+            <Trash2 size={14} /> Trash
+          </Link>
+          <button className="menu-item" role="menuitem" onClick={() => { setOpen(false); useUiStore.getState().setShortcuts(true); }}>
+            <Keyboard size={14} /> Keyboard shortcuts <kbd className="ml-auto">?</kbd>
+          </button>
           <button className="menu-item" role="menuitem" onClick={signOut}>
             <LogOut size={14} /> Sign out
           </button>
@@ -276,6 +293,7 @@ export function AppShell() {
       </div>
       <TaskDrawer />
       <CommandPalette />
+      <ShortcutsLayer />
       <CreateTaskDialog />
       <CreateProjectDialog />
     </div>

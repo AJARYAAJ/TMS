@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, MinRole } from '../../common/auth/decorators';
 import { AuthPrincipal } from '../../common/auth/principal';
@@ -90,5 +90,31 @@ export class TasksController {
   @Delete(':id/links/:linkId')
   removeLink(@CurrentUser() u: AuthPrincipal, @Param('id') id: string, @Param('linkId', ParseUUIDPipe) linkId: string) {
     return this.tasks.removeLink(u, id, linkId);
+  }
+}
+
+/** Trash: soft-deleted tasks are kept for 30 days, then purged by a background job. */
+@ApiTags('trash')
+@ApiBearerAuth()
+@Controller('trash')
+export class TrashController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Get()
+  list(@CurrentUser() u: AuthPrincipal, @Query('projectId') projectId?: string) {
+    return this.tasks.trash(u.organizationId, projectId);
+  }
+
+  @MinRole(Role.MEMBER)
+  @Post(':id/restore')
+  @HttpCode(200)
+  restore(@CurrentUser() u: AuthPrincipal, @Param('id', ParseUUIDPipe) id: string) {
+    return this.tasks.restore(u, id);
+  }
+
+  @MinRole(Role.ADMIN)
+  @Delete(':id')
+  purge(@CurrentUser() u: AuthPrincipal, @Param('id', ParseUUIDPipe) id: string) {
+    return this.tasks.purge(u, id);
   }
 }

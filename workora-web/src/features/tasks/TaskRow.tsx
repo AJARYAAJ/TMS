@@ -4,7 +4,7 @@ import type { Task } from '@/types';
 import { formatDate, isOverdue } from '@/utils/format';
 import { useOpenTask } from './useOpenTask';
 
-export function TaskRow({ task, extra, selected, onSelect }: { task: Task; extra?: React.ReactNode; selected?: boolean; onSelect?: (on: boolean, shift: boolean) => void }) {
+export function TaskRow({ task, extra, trailing, selected, onSelect }: { task: Task; extra?: React.ReactNode; trailing?: React.ReactNode; selected?: boolean; onSelect?: (on: boolean, shift: boolean) => void }) {
   const openTask = useOpenTask();
   return (
     <div
@@ -49,6 +49,7 @@ export function TaskRow({ task, extra, selected, onSelect }: { task: Task; extra
       <StatusBadge status={task.status} state={task.state} />
       <span className={`due${isOverdue(task.dueDate, task.status) ? ' overdue' : ''}`}>{formatDate(task.dueDate)}</span>
       <Avatar user={task.assignee} size={22} />
+      {trailing}
     </div>
   );
 }
