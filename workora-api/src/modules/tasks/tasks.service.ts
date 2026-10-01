@@ -320,6 +320,10 @@ export class TasksService {
         }
       }
 
+      if (!dto.labelIds && (dto.addLabelIds?.length || dto.removeLabelIds?.length)) {
+        const keep = task.labels.map((l) => l.id).filter((id) => !dto.removeLabelIds?.includes(id));
+        dto = { ...dto, labelIds: [...new Set([...keep, ...(dto.addLabelIds ?? [])])] };
+      }
       if (dto.labelIds) {
         const next = await this.loadLabels(m, principal.organizationId, dto.labelIds);
         const before = task.labels.map((l) => l.name).sort();

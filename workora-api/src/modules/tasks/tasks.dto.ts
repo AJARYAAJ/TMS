@@ -56,6 +56,10 @@ export class UpdateTaskDto {
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) labelIds?: string[];
   /** Custom field values: `{ "<fieldId or name>": value }`; `null` clears a value. */
   @IsOptional() @IsObject() customFields?: Record<string, unknown>;
+  /** Adds labels without replacing the others (bulk edit). */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) addLabelIds?: string[];
+  /** Removes these labels, keeping the rest. */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) removeLabelIds?: string[];
 }
 
 export class MoveTaskDto {

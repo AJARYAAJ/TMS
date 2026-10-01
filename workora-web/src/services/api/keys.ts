@@ -35,4 +35,11 @@ export const qk = {
   integrations: ['integrations'] as const,
   emailPrefs: ['email', 'preferences'] as const,
   emailStatus: ['email', 'status'] as const,
+  fields: (projectId: string) => ['fields', projectId] as const,
+  views: (projectId: string) => ['views', projectId] as const,
+  trash: ['trash'] as const,
+  workload: (params: Record<string, unknown>) => ['workload', params] as const,
+  burndown: (sprintId: string) => ['burndown', sprintId] as const,
+  velocity: (projectId: string) => ['velocity', projectId] as const,
+  forms: (projectId: string) => ['forms', projectId] as const,
 };

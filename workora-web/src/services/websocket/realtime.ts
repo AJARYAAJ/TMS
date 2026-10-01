@@ -95,6 +95,7 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
       const task: Task = e.data.task;
       removeCachedTask(qc, task.id);
       qc.removeQueries({ queryKey: qk.task(task.key) });
+      qc.invalidateQueries({ queryKey: qk.trash });
       if (!fromSelf) invalidateTaskViews(qc, task.projectId);
       break;
     }
@@ -118,6 +119,21 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
       qc.invalidateQueries({ queryKey: qk.task(e.data.task.key) });
       qc.invalidateQueries({ queryKey: qk.taskActivity(e.data.task.key) });
       if (e.projectId) invalidateTaskViews(qc, e.projectId);
+      break;
+    case 'FIELDS_UPDATED':
+      if (e.projectId) {
+        qc.setQueryData(qk.fields(e.projectId), e.data.fields);
+        invalidateTaskViews(qc, e.projectId);
+      }
+      break;
+    case 'VIEWS_UPDATED':
+      if (e.projectId) qc.invalidateQueries({ queryKey: qk.views(e.projectId) });
+      break;
+    case 'TASK_RESTORED':
+    case 'TASKS_IMPORTED':
+      qc.invalidateQueries({ queryKey: qk.trash });
+      if (e.projectId) invalidateTaskViews(qc, e.projectId);
+      qc.invalidateQueries({ queryKey: qk.labels });
       break;
     case 'WORKFLOW_UPDATED':
       if (e.projectId) {

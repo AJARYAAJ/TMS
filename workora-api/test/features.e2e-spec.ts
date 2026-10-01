@@ -64,7 +64,7 @@ describe('Workora work-management features (e2e)', () => {
     const bug = (await http().post('/api/v1/labels').set(auth(owner.token)).send({ name: 'Frontend', color: '#0ea5e9' }).expect(201)).body.data;
     await http().post('/api/v1/labels').set(auth(owner.token)).send({ name: 'frontend' }).expect(409);
     const t = await task('Hero banner', { labelIds: [bug.id] });
-    expect(t.labels).toEqual([{ id: bug.id, name: 'Frontend', color: '#0ea5e9' }]);
+    expect(t.labels).toEqual([{ id: bug.id, name: 'Frontend', color: '#0ea5e9', description: '' }]);
     await task('Unlabelled');
     const filtered = await http().get(`/api/v1/tasks?projectId=WEB&labelId=${bug.id}`).set(auth(owner.token)).expect(200);
     expect(filtered.body.data.map((x: any) => x.key)).toEqual([t.key]);

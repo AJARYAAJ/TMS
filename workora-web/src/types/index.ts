@@ -70,6 +70,8 @@ export interface Task {
   parent: { id: string; key: string; title: string; type: TaskType } | null;
   estimateMinutes: number | null;
   labels: Label[];
+  /** Custom field values keyed by field id (select: option id; multi-select: option ids). */
+  customFields: Record<string, string | number | boolean | string[]>;
   subtaskCount: number;
   subtaskDone: number;
   blockedBy: number;
@@ -125,7 +127,9 @@ export interface Label {
   id: string;
   name: string;
   color: string;
+  description?: string;
   usage?: number;
+  openUsage?: number;
 }
 
 export interface TimeEntry {
@@ -367,4 +371,123 @@ export interface EmailStatus {
   from: string;
   last7Days: { sent: number; failed: number; skipped: number };
   deliveries: EmailDelivery[];
+}
+
+export type FieldType = 'TEXT' | 'NUMBER' | 'SELECT' | 'MULTI_SELECT' | 'DATE' | 'CHECKBOX' | 'URL' | 'PERSON';
+
+export interface FieldOption {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export interface CustomField {
+  id: string;
+  projectId: string;
+  name: string;
+  type: FieldType;
+  options: FieldOption[];
+  position: number;
+  required: boolean;
+  showInList: boolean;
+}
+
+export interface SavedView {
+  id: string;
+  projectId: string | null;
+  name: string;
+  shared: boolean;
+  mine: boolean;
+  config: { filters?: Record<string, unknown>; cf?: Record<string, unknown>; hiddenFields?: string[] };
+  updatedAt: string;
+}
+
+export interface TrashedTask {
+  id: string;
+  key: string;
+  title: string;
+  type: TaskType;
+  status: TaskStatus;
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  deletedAt: string;
+  deletedBy: { id: string | null; name: string | null };
+  subtaskCount: number;
+  purgeAt: string;
+}
+
+export interface WorkloadPerson {
+  user: UserSummary;
+  capacityMinutes: number;
+  weeks: { minutes: number; count: number }[];
+  unscheduled: { minutes: number; count: number };
+  unestimated: number;
+  openTasks: number;
+  tasks: { id: string; key: string; title: string; projectId: string; priority: TaskPriority; dueDate: string | null; startDate: string | null; minutes: number; overdue: boolean; weeks: number[] }[];
+}
+
+export interface Workload {
+  from: string;
+  weeks: string[];
+  people: WorkloadPerson[];
+  unassigned: { count: number; minutes: number };
+}
+
+export interface Burndown {
+  sprintId: string;
+  name: string;
+  status: string;
+  unit: 'points' | 'tasks';
+  total: number;
+  startDate: string;
+  endDate: string;
+  days: { date: string; ideal: number; remaining: number | null }[];
+}
+
+export interface Velocity {
+  unit: 'points' | 'tasks';
+  average: number;
+  sprints: { id: string; name: string; completedAt: string; committed: number; completed: number }[];
+}
+
+export type QuestionKind = 'title' | 'description' | 'email' | 'name' | 'priority' | 'type' | 'dueDate' | 'field';
+
+export interface FormQuestion {
+  id: string;
+  kind: QuestionKind;
+  fieldId?: string;
+  label: string;
+  help?: string;
+  required: boolean;
+}
+
+export interface IntakeForm {
+  id: string;
+  projectId: string;
+  slug: string;
+  publicPath: string;
+  name: string;
+  description: string;
+  questions: FormQuestion[];
+  defaults: { type?: TaskType; priority?: TaskPriority; stateId?: string; assigneeId?: string; labelIds?: string[] };
+  enabled: boolean;
+  submissionCount: number;
+  lastSubmittedAt: string | null;
+  createdAt: string;
+}
+
+export interface ImportPreview {
+  columns: string[];
+  mapping: Record<string, string>;
+  targets: string[];
+  fields: { id: string; name: string; type: FieldType }[];
+  total: number;
+  valid: number;
+  newLabels: string[];
+  problems: { row: number; errors: string[]; warnings: string[] }[];
+  sample: { row: number; title: string; ok: boolean }[];
+  created: number;
+  keys?: string[];
+  failed?: { row: number; message: string }[];
 }

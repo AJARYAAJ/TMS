@@ -8,6 +8,7 @@ import { api } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
 import { TASK_PRIORITIES } from '@/types';
 import { formatDate, PRIORITY_LABEL } from '@/utils/format';
+import { BurndownTile, VelocityTile } from './SprintCharts';
 
 interface ProjectReport {
   total: number;
@@ -68,6 +69,14 @@ export default function ReportsView() {
         <section className="tile span-2">
           <h2>Created vs completed · last 14 days</h2>
           <TrendChart trend={data.trend} />
+        </section>
+        <section className="tile span-2">
+          <h2>Sprint burndown</h2>
+          <BurndownTile projectId={project.id} />
+        </section>
+        <section className="tile span-2">
+          <h2>Velocity</h2>
+          <VelocityTile projectId={project.id} />
         </section>
         <section className="tile">
           <h2>Open work by assignee</h2>

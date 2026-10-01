@@ -1,6 +1,6 @@
-import { BarChart3, CalendarDays, FileText, GanttChart, Kanban, LayoutGrid, List, ListTodo, Map, Plus, Rocket, Star, Target, Workflow, Zap } from 'lucide-react';
-import { Suspense } from 'react';
-import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { BarChart3, BookOpen, CalendarDays, FileText, GanttChart, Kanban, LayoutGrid, List, ListTodo, Map, Plus, Rocket, SlidersHorizontal, Star, Target, Workflow, Zap } from 'lucide-react';
+import { Suspense, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import { PageSkeleton } from '@/app/layouts/AppShell';
 import { useUiStore } from '@/app/ui.store';
 import { EmptyState, Ring, Skeleton } from '@/components/ui';
@@ -24,6 +24,8 @@ const VIEWS = [
   ['reports', 'Reports', BarChart3],
   ['automations', 'Automations', Zap],
   ['workflow', 'Workflow', Workflow],
+  ['fields', 'Fields', SlidersHorizontal],
+  ['forms', 'Forms', BookOpen],
 ] as const;
 
 /** Project workspace: hero header + view switcher. Switching views is client-side routing only. */
@@ -34,6 +36,10 @@ export default function ProjectLayout() {
   const openCreateTask = useUiStore((s) => s.openCreateTask);
   const favorite = useToggleFavorite();
   useWatchProject(project?.id);
+  const nav = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  // Keep the active view visible when the tab strip overflows (e.g. Fields, Forms on narrow screens).
+  useEffect(() => nav.current?.querySelector('a.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }), [pathname, project?.id]);
 
   if (error && !project) {
     return (
@@ -79,7 +85,7 @@ export default function ProjectLayout() {
             <Skeleton width={320} height={40} />
           )}
         </div>
-        <nav className="view-switch" aria-label="Project views">
+        <nav className="view-switch" aria-label="Project views" ref={nav}>
           {VIEWS.map(([path, label, Icon]) => (
             <NavLink key={path} to={path ? `/projects/${projectKey}/${path}` : `/projects/${projectKey}`} end className={({ isActive }) => (isActive ? 'active' : '')}>
               <Icon size={14} /> <span>{label}</span>

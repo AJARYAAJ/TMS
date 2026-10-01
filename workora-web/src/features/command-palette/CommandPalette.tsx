@@ -10,6 +10,7 @@ import { useSearch } from '@/features/search/api';
 import { useOpenTask } from '@/features/tasks/useOpenTask';
 import { useRunningTimer, useTimer } from '@/features/tasks/api';
 import { useCreateDocument } from '@/features/docs/api';
+import { ALL_FEATURES, resolveFeaturePath } from '@/features/explore/features';
 
 interface Command {
   id: string;
@@ -30,6 +31,7 @@ export function CommandPalette() {
 }
 
 function PaletteBody({ onClose }: { onClose: () => void }) {
+  useEffect(() => useUiStore.getState().markOnboarding('palette'), []);
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,22 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     for (const p of projects ?? []) {
       list.push({ id: `p-${p.id}`, label: p.name, hint: p.key, icon: <FolderKanban size={16} style={{ color: p.color }} />, group: 'Projects', keywords: `${p.key} project`, run: go(`/projects/${p.key}/board`) });
     }
+    const firstProject = projects?.find((p) => p.status === 'ACTIVE')?.key;
+    for (const f of ALL_FEATURES) {
+      if (f.role === 'ADMIN' && !canAdmin) continue;
+      if (['home', 'my-work', 'inbox', 'goals', 'docs', 'roadmap', 'time', 'projects', 'reports', 'palette'].includes(f.id)) continue;
+      const path = resolveFeaturePath(f.to, currentProject ?? firstProject);
+      list.push({
+        id: `feature-${f.id}`,
+        label: f.name,
+        hint: f.isNew ? 'new' : undefined,
+        icon: f.icon,
+        group: 'Features',
+        keywords: `${f.blurb} ${f.keywords ?? ''}`,
+        run: f.to === '#shortcuts' ? () => useUiStore.getState().setShortcuts(true) : go(path),
+      });
+    }
+    list.push({ id: 'explore', label: 'Explore all features', icon: <Search size={16} />, group: 'Navigate', keywords: 'help features discover', run: go('/explore') });
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canCreate, canAdmin, currentProject, projects, session, theme, timer, openTaskKey]);

@@ -1,5 +1,7 @@
 import { BellRing, Inbox, Mail, MailX } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useUiStore } from '@/app/ui.store';
 import { SkeletonRows } from '@/components/ui';
 import { useSession } from '@/features/auth/session.store';
 import { useEmailPrefs, useUpdateEmailPrefs } from './api';
@@ -9,6 +11,8 @@ export default function SettingsPage() {
   const session = useSession()!;
   const { data, isLoading } = useEmailPrefs();
   const update = useUpdateEmailPrefs();
+  const mark = useUiStore((s) => s.markOnboarding);
+  useEffect(() => mark('email'), [mark]);
   const on = data?.enabled ?? true;
   const count = data ? data.options.filter((o) => data.categories[o.key]).length : 0;
 

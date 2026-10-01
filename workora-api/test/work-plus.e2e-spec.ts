@@ -372,4 +372,32 @@ describe('Custom fields, trash, views, insights, forms, CSV (e2e)', () => {
       expect(activity[0].summary).toBe(`imported 3 tasks (${r.keys[0]} – ${r.keys[2]})`);
     });
   });
+
+  describe('labels', () => {
+    it('describes, renames (no clashes), bulk adds/removes, merges and counts usage', async () => {
+      const bug = await post('/labels', { name: 'bug', color: '#ef4444', description: 'Something is broken' });
+      const defect = await post('/labels', { name: 'defect', color: '#f59e0b' });
+      const ux = await post('/labels', { name: 'ux' });
+      expect(bug.description).toBe('Something is broken');
+      await patch(`/labels/${defect.id}`, { name: 'BUG' }, owner, 409);
+      await patch(`/labels/${ux.id}`, { name: 'UX polish', description: 'Visual & interaction details' });
+
+      const a = await task('Crash on save', { labelIds: [defect.id] });
+      const b = await task('Button misaligned', { labelIds: [ux.id, bug.id] });
+      const res = await patch('/tasks/bulk', { ids: [a.key, b.key], patch: { addLabelIds: [ux.id], removeLabelIds: [bug.id] } });
+      expect(res.failed).toEqual([]);
+      const names = async (k: string) => (await get(`/tasks/${k}`)).labels.map((l: any) => l.name);
+      expect(await names(a.key)).toEqual(['defect', 'UX polish']);
+      expect(await names(b.key)).toEqual(['UX polish']);
+
+      await post(`/labels/${defect.id}/merge`, { into: bug.id }, member, 403);
+      const merged = await post(`/labels/${defect.id}/merge`, { into: bug.id }, owner, 200);
+      expect(merged).toMatchObject({ merged: 'defect', moved: 1 });
+      expect(await names(a.key)).toEqual(['bug', 'UX polish']);
+      const labels = await get('/labels');
+      expect(labels.find((l: any) => l.name === 'defect')).toBeUndefined();
+      expect(labels.find((l: any) => l.name === 'bug')).toMatchObject({ usage: 1, openUsage: 1, description: 'Something is broken' });
+      expect((await get(`/tasks?labelId=${ux.id}`)).length).toBe(2);
+    });
+  });
 });

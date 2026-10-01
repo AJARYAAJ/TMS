@@ -19,6 +19,7 @@ import { WorkflowsAndRecurrence1727700000000 } from './migrations/1727700000000-
 import { SlackGithubIntegrations1727800000000 } from './migrations/1727800000000-SlackGithubIntegrations';
 import { EmailNotifications1727900000000 } from './migrations/1727900000000-EmailNotifications';
 import { WorkManagementPlus1728000000000 } from './migrations/1728000000000-WorkManagementPlus';
+import { LabelDescriptions1728100000000 } from './migrations/1728100000000-LabelDescriptions';
 import { CustomField } from '../modules/fields/custom-field.entity';
 import { SavedView } from '../modules/views/views.module';
 import { Form } from '../modules/forms/forms.module';
@@ -45,7 +46,7 @@ export function dataSourceOptions(url = loadConfig().databaseUrl): DataSourceOpt
     type: 'postgres',
     url,
     entities: ENTITIES,
-    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000, EmailNotifications1727900000000, WorkManagementPlus1728000000000],
+    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000, EmailNotifications1727900000000, WorkManagementPlus1728000000000, LabelDescriptions1728100000000],
     migrationsRun: true,
     synchronize: false,
     namingStrategy: new SnakeNamingStrategy(),

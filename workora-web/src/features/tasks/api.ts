@@ -20,6 +20,8 @@ export interface TaskFilters {
   open?: 'true' | 'false';
   dueFrom?: string;
   dueTo?: string;
+  /** JSON: custom field filter `{ fieldId: value }`. */
+  cf?: string;
   sort?: string;
   order?: 'asc' | 'desc';
   page?: number;
@@ -27,8 +29,13 @@ export interface TaskFilters {
 }
 
 export type TaskPatch = Partial<Pick<Task, 'title' | 'description' | 'type' | 'status' | 'stateId' | 'priority' | 'sprintId' | 'storyPoints' | 'startDate' | 'dueDate' | 'parentId' | 'estimateMinutes' | 'recurrence'>> & {
+  /** Partial: only the fields to change; `null` clears a value. */
+  customFields?: Record<string, unknown>;
   assigneeId?: string | null;
   labelIds?: string[];
+  /** Bulk edit: add / remove labels without replacing the others. */
+  addLabelIds?: string[];
+  removeLabelIds?: string[];
 };
 
 export function useTasks(filters: TaskFilters, enabled = true) {
@@ -77,7 +84,8 @@ export function useUpdateTask() {
     onMutate: async ({ task, patch, optimistic }) => {
       await qc.cancelQueries({ queryKey: ['board'] });
       const rollback = snapshotTaskCaches(qc);
-      const { assigneeId: _ignored, ...fields } = patch;
+      // Custom field patches are partial; callers pass the merged map in `optimistic`.
+      const { assigneeId: _ignored, customFields: _cf, ...fields } = patch;
       patchCachedTask(qc, task.id, (t) => ({ ...t, ...fields, ...optimistic }));
       return { rollback };
     },
@@ -121,7 +129,19 @@ export function useDeleteTask() {
       ctx?.rollback();
       toast.error(`Couldn't delete task. ${errorMessage(err)}`);
     },
-    onSuccess: (_d, task) => toast.success(`${task.key} deleted`),
+    onSuccess: (_d, task) =>
+      toast.info(`${task.key} moved to trash`, {
+        label: 'Undo',
+        onClick: () =>
+          api
+            .post(`/trash/${task.id}/restore`)
+            .then(() => {
+              invalidateTaskViews(qc, task.projectId);
+              qc.invalidateQueries({ queryKey: ['trash'] });
+              toast.success(`${task.key} restored`);
+            })
+            .catch((e) => toast.error(errorMessage(e))),
+      }),
     onSettled: (_d, _e, task) => invalidateTaskViews(qc, task.projectId),
   });
 }
@@ -202,7 +222,7 @@ export function useLabels() {
 export function useCreateLabel() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; color: string }) => api.post<Label>('/labels', body),
+    mutationFn: (body: { name: string; color: string; description?: string }) => api.post<Label>('/labels', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.labels }),
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -213,6 +233,33 @@ export function useDeleteLabel() {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/labels/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.labels }),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+export function useUpdateLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name?: string; color?: string; description?: string }) => api.patch<Label>(`/labels/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.labels });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['board'] });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+export function useMergeLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, into }: { id: string; into: string }) => api.post<{ merged: string; moved: number; into: Label }>(`/labels/${id}/merge`, { into }),
+    onSuccess: (r) => {
+      toast.success(`Merged “${r.merged}” into “${r.into.name}” (${r.moved} tasks)`);
+      qc.invalidateQueries({ queryKey: qk.labels });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['board'] });
+    },
     onError: (e) => toast.error(errorMessage(e)),
   });
 }

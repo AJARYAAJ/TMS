@@ -23,6 +23,10 @@ import { TimeService } from '../modules/time/time.module';
 import { WorkflowService } from '../modules/workflow/workflow.module';
 import { GithubService } from '../modules/integrations/github.service';
 import { IntegrationsService } from '../modules/integrations/integrations.module';
+import { FieldType } from '../modules/fields/custom-field.entity';
+import { FieldsService } from '../modules/fields/fields.module';
+import { FormsService } from '../modules/forms/forms.module';
+import { ViewsService } from '../modules/views/views.module';
 import { Integration } from '../modules/integrations/integration.entity';
 
 const PASSWORD = 'workora123';
@@ -248,6 +252,79 @@ async function main() {
   });
   await github.handle(integration, 'pull_request', pr(42, `${payment}: payment intents + webhooks`, `${payment.toLowerCase()}-payment-intents`, 'rahul-dev'));
   await github.handle(integration, 'pull_request', pr(45, 'Persist carts in Redis', `${created['Cart persistence across devices'].toLowerCase()}-cart-sync`, 'alex-w', { draft: true }));
+
+  // ── Custom fields on ECOM, with values
+  const fieldsSvc = app.get(FieldsService);
+  await fieldsSvc.create(owner, ecom.id, { name: 'Customer tier', type: FieldType.SELECT, options: [{ label: 'Enterprise', color: '#6366f1' }, { label: 'Growth', color: '#10b981' }, { label: 'Starter', color: '#f59e0b' }] } as any);
+  await fieldsSvc.create(owner, ecom.id, { name: 'Platforms', type: FieldType.MULTI_SELECT, options: [{ label: 'Web' }, { label: 'iOS' }, { label: 'Android' }] } as any);
+  await fieldsSvc.create(owner, ecom.id, { name: 'Revenue impact', type: FieldType.NUMBER } as any);
+  await fieldsSvc.create(owner, ecom.id, { name: 'Go-live', type: FieldType.DATE, showInList: false } as any);
+  await fieldsSvc.create(owner, ecom.id, { name: 'Spec', type: FieldType.URL, showInList: false } as any);
+  await fieldsSvc.create(owner, ecom.id, { name: 'QA sign-off', type: FieldType.CHECKBOX, showInList: false } as any);
+  const values: [string, Record<string, unknown>][] = [
+    ['Implement Payment API', { 'Customer tier': 'Enterprise', Platforms: ['Web', 'iOS', 'Android'], 'Revenue impact': 120000, 'Go-live': day(10), Spec: 'https://docs.example.com/payments', 'QA sign-off': false }],
+    ['Add Apple Pay / Google Pay', { 'Customer tier': 'Growth', Platforms: ['iOS', 'Android'], 'Revenue impact': 45000 }],
+    ['Fix rounding error in tax calculation', { 'Customer tier': 'Enterprise', Platforms: ['Web'], 'Revenue impact': 8000 }],
+    ['Cart persistence across devices', { 'Customer tier': 'Starter', Platforms: ['Web', 'iOS'] }],
+    ['Guest checkout', { 'Customer tier': 'Growth', Platforms: ['Web'], 'Revenue impact': 30000 }],
+  ];
+  for (const [title, cf] of values) await tasks.update(owner, created[title], { customFields: cf });
+
+  // ── Estimates for the Workload view
+  const estimates: [string, number][] = [
+    ['Implement Payment API', 16], ['Cart persistence across devices', 10], ['Order confirmation emails', 6],
+    ['Fix rounding error in tax calculation', 4], ['Inventory sync with warehouse', 14], ['Add Apple Pay / Google Pay', 12],
+  ];
+  for (const [title, h] of estimates) await tasks.update(owner, created[title], { estimateMinutes: h * 60 });
+  await tasks.update(owner, created['Add Apple Pay / Google Pay'], { assigneeId: R.userId });
+
+  // ── Sprint history: burndown for the active sprint and velocity from two completed ones
+  await db.query(`UPDATE sprints SET start_date = $2, end_date = $3 WHERE id = $1`, [sprintId, day(-6), day(7)]);
+  for (const [title, offset] of [['Set up product catalog schema', -5], ['Design checkout flow', -3]] as const) {
+    await db.query(`UPDATE tasks SET completed_at = now() + ($2 || ' days')::interval WHERE key = $1`, [created[title], offset]);
+  }
+  for (const [n, start, committed, completed] of [[1, -34, 21, 16], [2, -20, 24, 22]] as const) {
+    await db.query(
+      `INSERT INTO sprints (organization_id, project_id, name, goal, status, start_date, end_date, completed_at, completion_stats)
+       VALUES ($1, $2, $3, '', 'COMPLETED', $4, $5, $6, $7)`,
+      [owner.organizationId, ecom.id, `Launch ${n}`, day(start), day(start + 13), new Date(Date.now() + (start + 13) * 86_400_000), JSON.stringify({ committedPoints: committed, completedPoints: completed, committedCount: 7, completedCount: 6 })],
+    );
+  }
+
+  // ── Saved views
+  const viewsSvc = app.get(ViewsService);
+  await viewsSvc.create(owner, { name: 'Urgent & high', projectId: ecom.id, shared: true, config: { filters: { priority: 'URGENT' } } } as any);
+  await viewsSvc.create(R, { name: 'My open work', projectId: ecom.id, config: { filters: { assigneeId: 'me', open: 'true' } } } as any);
+
+  // ── Label descriptions
+  await db.query(`UPDATE labels SET description = 'Customer-facing web & app UI' WHERE id = $1`, [lFrontend.id]);
+  await db.query(`UPDATE labels SET description = 'APIs, jobs and data' WHERE id = $1`, [lBackend.id]);
+  await db.query(`UPDATE labels SET description = 'Checkout, billing, refunds' WHERE id = $1`, [lPayments.id]);
+  await db.query(`UPDATE labels SET description = 'Raised by a customer — reply when shipped' WHERE id = $1`, [lCustomer.id]);
+
+  // ── Intake form with a couple of responses
+  const formsSvc = app.get(FormsService);
+  const tierField = (await fieldsSvc.list(owner.organizationId, ecom.id)).find((f) => f.name === 'Customer tier')!;
+  const form = await formsSvc.create(owner, ecom.id, {
+    name: 'Customer feature requests',
+    description: 'Tell the checkout team what would make your store sell more.',
+    questions: [
+      { kind: 'title', label: 'What would you like?' },
+      { kind: 'description', label: 'Why does it matter?' },
+      { kind: 'field', fieldId: tierField.id, label: 'Your plan', required: true },
+      { kind: 'priority', label: 'How urgent?' },
+      { kind: 'name', label: 'Your name' },
+      { kind: 'email', label: 'Email' },
+    ],
+    defaults: { type: TaskType.STORY, labelIds: [lCustomer.id] },
+  } as any);
+  const q = (kind: string) => form.questions.find((x: any) => x.kind === kind)!.id;
+  await formsSvc.submit(form.slug, { answers: { [q('title')]: 'Save cart for later', [q('description')]: 'Shoppers want to come back to it on mobile.', [q('field')]: 'Growth', [q('priority')]: 'MEDIUM', [q('name')]: 'Nina Shopkeeper', [q('email')]: 'nina@shop.example' } });
+  await formsSvc.submit(form.slug, { answers: { [q('title')]: 'Invoice PDFs in multiple languages', [q('field')]: 'Enterprise', [q('priority')]: 'HIGH', [q('name')]: 'Omar B.', [q('email')]: 'omar@corp.example' } });
+
+  // ── One task in the trash
+  const oops = await tasks.create(owner, { projectId: ecom.id, title: 'Old spike: evaluate payment vendor B' });
+  await tasks.remove(owner, oops.key);
 
   // ── History: finished work spread over the last ~10 weeks (feeds the Momentum heatmap)
   const chores = ['Crash reporting', 'Deep links', 'Onboarding copy', 'Dark mode polish', 'Icon set', 'Push opt-in', 'Analytics events', 'Splash screen', 'Settings screen', 'Accessibility audit', 'Image caching', 'Error states', 'Release notes', 'Beta invites'];

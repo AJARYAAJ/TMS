@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Avatar, SkeletonRows, Spinner } from '@/components/ui';
 import { useCan, useSession } from '@/features/auth/session.store';
 import { TeamsPanel } from '@/features/teams/TeamsPage';
@@ -15,7 +16,10 @@ const ROLES: Role[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
 /** Administration module (lazy-loaded): members, roles (RBAC) and teams. */
 export default function AdminPage() {
-  const [tab, setTab] = useState<'members' | 'teams' | 'labels' | 'integrations' | 'email'>('members');
+  type Tab = 'members' | 'teams' | 'labels' | 'integrations' | 'email';
+  const [params, setParams] = useSearchParams();
+  const tab = (['members', 'teams', 'labels', 'integrations', 'email'].includes(params.get('tab') ?? '') ? params.get('tab') : 'members') as Tab;
+  const setTab = (t: Tab) => setParams(t === 'members' ? {} : { tab: t }, { replace: true });
   const session = useSession()!;
   return (
     <div className="page">
