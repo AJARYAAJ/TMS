@@ -8,6 +8,7 @@ export class User {
   @Column({ select: false }) passwordHash: string;
   /** Overrides of the default email preferences (see modules/email/email-prefs.ts). */
   @Column({ type: 'jsonb', default: {}, select: false }) emailPrefs: Record<string, boolean>;
+  @Column({ type: 'jsonb', default: {}, select: false }) pushPrefs: Record<string, boolean>;
   /** Encrypted TOTP seed once two-factor authentication is on (SecretBox). */
   @Column({ type: 'varchar', nullable: true, select: false }) totpSecret: string | null;
   /** Encrypted seed shown during setup, promoted to totpSecret after the first valid code. */

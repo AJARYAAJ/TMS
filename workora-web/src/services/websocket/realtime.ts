@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
 import { config } from '@/config';
 import { toast } from '@/components/ui/toast';
+import { notificationPath, showFromTab } from '@/features/notifications/desktop';
 import { invalidateTaskViews, patchCachedTask, removeCachedTask } from '@/features/tasks/cache';
 import type { Envelope } from '@/services/api/client';
 import { qk } from '@/services/api/keys';
@@ -21,7 +22,7 @@ class RealtimeClient {
   private statusListeners = new Set<(s: Status) => void>();
   status: Status = 'offline';
 
-  connect(token: string, qc: QueryClient, selfId: string, openTask: (key: string) => void) {
+  connect(token: string, qc: QueryClient, selfId: string, openNotification: (n: Notification) => void) {
     this.disconnect();
     const socket = io({ path: config.realtimePath, auth: { token }, transports: ['websocket'], reconnectionDelayMax: 10_000 });
     this.socket = socket;
@@ -37,7 +38,7 @@ class RealtimeClient {
       qc.invalidateQueries();
     });
     socket.on('event', (e: RealtimeEvent) => {
-      applyToCache(qc, e, selfId, openTask);
+      applyToCache(qc, e, selfId, openNotification);
       this.listeners.forEach((l) => l(e));
     });
   }
@@ -77,7 +78,7 @@ class RealtimeClient {
 
 export const realtime = new RealtimeClient();
 
-function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTask: (key: string) => void) {
+function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openNotification: (n: Notification) => void) {
   const fromSelf = e.actor?.id === selfId;
   switch (e.type) {
     case 'TASK_CREATED':
@@ -179,7 +180,9 @@ function applyToCache(qc: QueryClient, e: RealtimeEvent, selfId: string, openTas
         env ? { data: [n, ...env.data.filter((x) => x.id !== n.id)], meta: { ...env.meta, unreadCount: (env.meta.unreadCount ?? 0) + 1 } } : env,
       );
       if (!qc.getQueryData(qk.notifications)) qc.invalidateQueries({ queryKey: qk.notifications });
-      toast.info(n.title, n.taskKey ? { label: 'Open', onClick: () => openTask(n.taskKey!) } : undefined);
+      toast.info(n.title, { label: 'Open', onClick: () => openNotification(n) });
+      // In another tab or app: a desktop notification, when this browser has no push subscription.
+      void showFromTab(n, `${import.meta.env.BASE_URL.replace(/\/$/, '')}${notificationPath(n)}`);
       break;
     }
   }

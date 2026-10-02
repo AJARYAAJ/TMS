@@ -1,21 +1,31 @@
-import { BellRing, Inbox, Mail, MailX } from 'lucide-react';
+import { Bell, BellRing, Inbox, Mail, Monitor } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useUiStore } from '@/app/ui.store';
 import { SkeletonRows } from '@/components/ui';
 import { useSession } from '@/features/auth/session.store';
+import { usePushConfig, useUpdatePushPrefs } from '@/features/notifications/api';
+import { DesktopCard } from '@/features/notifications/DesktopCard';
+import { useDesktop } from '@/features/notifications/desktop';
 import { useEmailPrefs, useUpdateEmailPrefs } from './api';
 import { TwoFactorCard } from './Security';
 
-/** Personal settings. Email notification preferences apply across every workspace you belong to. */
+/**
+ * Personal settings. Notification preferences apply across every workspace you belong to:
+ * everything always reaches the bell and Inbox; each kind can also go to desktop and email.
+ */
 export default function SettingsPage() {
   const session = useSession()!;
-  const { data, isLoading } = useEmailPrefs();
-  const update = useUpdateEmailPrefs();
+  const { data: email, isLoading } = useEmailPrefs();
+  const updateEmail = useUpdateEmailPrefs();
+  const { data: push } = usePushConfig();
+  const updatePush = useUpdatePushPrefs();
+  const desktopMode = useDesktop((s) => s.mode);
   const mark = useUiStore((s) => s.markOnboarding);
   useEffect(() => mark('email'), [mark]);
-  const on = data?.enabled ?? true;
-  const count = data ? data.options.filter((o) => data.categories[o.key]).length : 0;
+  const emailOn = email?.enabled ?? true;
+  const pushOn = push?.enabled ?? true;
+  const desktopHere = desktopMode === 'push' || desktopMode === 'tab';
 
   return (
     <div className="page">
@@ -27,66 +37,101 @@ export default function SettingsPage() {
       </header>
 
       <div className="settings-grid">
-        <section className="tile email-prefs">
-          <div className={`email-hero${on ? '' : ' off'}`}>
-            <span className="email-hero-icon">{on ? <Mail size={22} /> : <MailX size={22} />}</span>
+        <section className="tile email-prefs" aria-label="Notification preferences">
+          <div className="email-hero">
+            <span className="email-hero-icon">
+              <Bell size={22} />
+            </span>
             <div>
-              <h2>Email notifications</h2>
+              <h2>Notifications</h2>
               <p className="muted small">
-                {isLoading ? '…' : on ? (
+                Everything always shows in your bell and <Link to="/inbox">Inbox</Link>. Choose what also reaches your desktop and your email
+                {email && (
                   <>
-                    Sent to <strong>{data?.email}</strong> · {count} of {data?.options.length} kinds on
+                    {' '}
+                    (<strong>{email.email}</strong>)
                   </>
-                ) : (
-                  'Paused. You will still see everything in your Inbox.'
                 )}
+                .
               </p>
             </div>
-            <label className="switch switch-lg ml-auto">
-              <input type="checkbox" checked={on} disabled={!data} onChange={() => update.mutate({ enabled: !on })} aria-label="Email notifications" />
-              <span />
-            </label>
           </div>
 
-          {isLoading || !data ? (
-            <SkeletonRows rows={6} />
+          {isLoading || !email || !push ? (
+            <SkeletonRows rows={8} />
           ) : (
-            <ul className={`pref-list${on ? '' : ' muted-list'}`} aria-disabled={!on}>
-              {data.options.map((o) => (
-                <li key={o.key}>
-                  <div>
-                    <strong>{o.label}</strong>
-                    <span className="muted small">{o.description}</span>
-                  </div>
-                  <label className="switch ml-auto">
-                    <input
-                      type="checkbox"
-                      checked={data.categories[o.key]}
-                      disabled={!on}
-                      onChange={() => update.mutate({ categories: { [o.key]: !data.categories[o.key] } })}
-                      aria-label={o.label}
-                    />
+            <>
+              <div className="pref-head">
+                <span />
+                <label className="pref-col">
+                  <Monitor size={14} /> Desktop
+                  <span className="switch switch-sm">
+                    <input type="checkbox" checked={pushOn} onChange={() => updatePush.mutate({ enabled: !pushOn })} aria-label="Desktop notifications" />
                     <span />
-                  </label>
-                </li>
-              ))}
-            </ul>
+                  </span>
+                </label>
+                <label className="pref-col">
+                  <Mail size={14} /> Email
+                  <span className="switch switch-sm">
+                    <input type="checkbox" checked={emailOn} onChange={() => updateEmail.mutate({ enabled: !emailOn })} aria-label="Email notifications" />
+                    <span />
+                  </span>
+                </label>
+              </div>
+              {!desktopHere && desktopMode !== 'unsupported' && (
+                <p className="pref-hint small">
+                  <BellRing size={13} /> Desktop notifications are off in this browser. Turn them on with the Desktop notifications card.
+                </p>
+              )}
+              <ul className="pref-list pref-matrix">
+                {email.options.map((o) => (
+                  <li key={o.key}>
+                    <div>
+                      <strong>{o.label}</strong>
+                      <span className="muted small">{o.description}</span>
+                    </div>
+                    <label className={`switch desktop${pushOn ? '' : ' muted-switch'}`}>
+                      <input
+                        type="checkbox"
+                        checked={push.categories[o.key] ?? true}
+                        disabled={!pushOn}
+                        onChange={() => updatePush.mutate({ categories: { [o.key]: !(push.categories[o.key] ?? true) } })}
+                        aria-label={`Desktop: ${o.label}`}
+                      />
+                      <span />
+                    </label>
+                    <label className={`switch email${emailOn ? '' : ' muted-switch'}`}>
+                      <input
+                        type="checkbox"
+                        checked={email.categories[o.key]}
+                        disabled={!emailOn}
+                        onChange={() => updateEmail.mutate({ categories: { [o.key]: !email.categories[o.key] } })}
+                        aria-label={o.label}
+                      />
+                      <span />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted small pref-foot">Security alerts (two-factor changes, a recovery code being used) always reach you.</p>
+            </>
           )}
         </section>
 
         <div className="settings-side">
-        <TwoFactorCard />
-        <aside className="tile settings-aside">
-          <BellRing size={20} />
-          <h3>How notifications reach you</h3>
-          <p className="muted small">
-            Everything lands in your <Link to="/inbox">Inbox</Link> instantly. Email is for the things you don't want to miss while away. Every email has a one-click unsubscribe
-            link, and changes here apply to mail that is already queued.
-          </p>
-          <Link to="/inbox" className="btn btn-soft btn-sm">
-            <Inbox size={13} /> Open Inbox
-          </Link>
-        </aside>
+          <DesktopCard />
+          <TwoFactorCard />
+          <aside className="tile settings-aside">
+            <BellRing size={20} />
+            <h3>How notifications reach you</h3>
+            <p className="muted small">
+              The bell updates live while you work. Desktop notifications reach you in other tabs and apps, and email is for when you are away. Every email has a one-click
+              unsubscribe link, and changes here apply to anything already queued.
+            </p>
+            <Link to="/inbox" className="btn btn-soft btn-sm">
+              <Inbox size={13} /> Open Inbox
+            </Link>
+          </aside>
         </div>
       </div>
     </div>

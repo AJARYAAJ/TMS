@@ -62,7 +62,8 @@ Keyboard: **Ctrl/⌘ K** command palette · **/** search · **C** create task ·
 | **Slack** | Channel notifications through an Incoming Webhook (Block Kit messages; pick events and an optional project) and a signed `/workora` slash command: `create [KEY:] title`, look up `ECOM-12`, search, help |
 | **GitHub** | Repository webhook (HMAC-verified) links PRs, commits, branches and issues that mention a task key; PR opened/merged moves the task forward through the workflow, `fixes ECOM-12` on the default branch closes it, new issues can become tasks. Task sheets show a *Development* panel with copyable branch names; cards show open-PR badges |
 | **Webhooks** | Outgoing webhooks with HMAC-SHA256 signatures, retries with backoff and a delivery log |
-| **Notifications** | Mentions, assignments, watched-task changes, overdue reminders (recurring job), automation alerts: in-app (live) and Inbox page |
+| **Notifications** | Every feature notifies the people involved: assignments (and being taken off a task), @mentions, comments, state, priority and due-date changes, files, new blockers, trash/restore, due-tomorrow and overdue reminders, GitHub PRs and issues, recurring tasks, form responses, goals, sprints, automations, workspace invites and security alerts. They arrive live in the bell (All / Unread / @Mentions filters, unread count in the tab title) and the Inbox |
+| **Desktop notifications** | Web Push (VAPID, end-to-end encrypted) through a service worker, so notifications pop up on the computer or phone even when Workora is closed; per-kind Desktop and Email switches in Settings; clicking one opens the right task or page (and switches workspace if needed) |
 | **Email** | SMTP delivery (any provider, TLS/STARTTLS, auth, pooled) of branded HTML + plain-text emails via a retrying job queue; per-user preferences for 8 kinds of email; signed one-click unsubscribe (RFC 8058 `List-Unsubscribe`); admin status page with test send and delivery log |
 | **Two-factor auth** | Authenticator-app (TOTP) codes with QR setup, 10 single-use recovery codes, replay protection, a security email when 2FA turns on or off; admins can require 2FA for the whole workspace (members are guided through setup on their next request) and see who has it on |
 | **Single sign-on** | OpenID Connect with Okta, Microsoft Entra ID, Google Workspace, Auth0, Keycloak or any OIDC provider: PKCE + nonce, signed ID tokens checked against the provider's keys, email-domain routing (“Continue with Okta” appears as you type your email), just-in-time account creation with a default role, and optional enforcement that turns off password sign-in for those domains (owners keep it as break-glass) |
@@ -121,6 +122,20 @@ reminders, automation alerts and workspace invites. Comments, status changes and
 until the person turns them on. Every email carries a signed unsubscribe link, and a `List-Unsubscribe`
 header so mail clients can show a one-click *Unsubscribe* button.
 
+### Desktop notifications
+
+Anyone can turn them on in the bell or under **Settings → Desktop notifications**. The browser asks for
+permission, then subscribes to Web Push. From then on notifications reach that computer even when no Workora
+tab is open. While Workora is in front, the in-app toast is shown instead, so nothing appears twice. Where push
+isn't available (for example a private window), the open app shows desktop notifications itself while it is in
+the background. Each kind of notification has its own Desktop and Email switch in Settings.
+
+Push needs HTTPS (or `localhost`). The server signs pushes with a VAPID key pair. Set `VAPID_PUBLIC_KEY` and
+`VAPID_PRIVATE_KEY` (generate them with `npx web-push generate-vapid-keys`) and optionally `VAPID_SUBJECT`
+(a `mailto:` or `https:` contact for push services). Without them, a key pair is generated on first use and
+stored encrypted in the database. If you change the keys later, each browser re-subscribes the next time
+Workora is opened in it, and until then it gets no pushes.
+
 Not yet built: OAuth "Add to Slack"/GitHub App installs (setup uses webhooks and secrets), refresh tokens,
 daily digest emails, SAML, SCIM provisioning and passkeys.
 
@@ -144,7 +159,7 @@ unreadable: people then have to set up 2FA again, and admins have to re-enter th
 cd workora-api && npm run test:e2e     # needs Postgres (workora_test db) + Redis
 ```
 
-Seven e2e suites (111 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
+Eight e2e suites (120 tests) cover the envelope and error codes, key-based lookup, PATCH semantics, board
 ordering, RBAC, tenant isolation, websocket delivery, signed uploads, search, sprints, reports, labels,
 epics/subtasks, dependencies, watchers, time tracking, goals, docs conflicts, automations (incl. loop
 prevention), signed webhook deliveries, bulk edit, favourites, overdue reminders, custom workflows
@@ -158,11 +173,18 @@ skips trashed tasks, restore into a deleted state, purge), saved views, burndown
 intake forms, CSV import/export and labels (rename clash, merge, bulk add/remove). The security suite covers TOTP
 (RFC 6238 vector, clock window, replay), encrypted secrets, recovery codes, the two-step sign-in, the workspace 2FA
 requirement, and OIDC SSO against a mock identity provider, including rejection of tampered audience, nonce,
-signature, expiry and issuer, browser binding of the login state, domain rules and enforced SSO.
+signature, expiry and issuer, browser binding of the login state, domain rules and enforced SSO. The notifications
+suite checks that every feature notifies the right people with the right category and link, and that due-tomorrow
+reminders fire once per due date. It also delivers real Web Push messages to a local push service and decrypts
+them with the browser's keys (aes128gcm, VAPID signature, urgency), and covers per-kind and master desktop
+switches, security alerts, expired subscriptions (410) and shared computers.
 
 Browser-level checks (Playwright, against the seeded demo) cover the full UI flows as well: drag & drop,
 realtime, workflows, recurrence, integrations, email, custom fields, saved views, board filters, CSV import and
 export, trash with undo, workload, burndown, public forms on mobile, label merge, Explore, shortcuts, role
-restrictions, 2FA setup, sign-in and the setup gate, and SSO sign-in and enforcement.
+restrictions, 2FA setup, sign-in and the setup gate, SSO sign-in and enforcement, and notifications: the live bell
+and its filters, opening tasks and pages from it, turning on desktop notifications, the service worker showing a
+push message and opening the task on click, background-tab notifications, switching workspace from a
+notification link, and the bell on mobile.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

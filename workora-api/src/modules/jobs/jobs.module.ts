@@ -82,13 +82,26 @@ export class JobsProcessor extends WorkerHost {
         RETURNING id`,
     );
     const ids = (Array.isArray(rows[0]) ? rows[0] : (rows as any)).map((r: { id: string }) => r.id);
-    if (!ids.length) return { overdue: 0 };
+    await this.publishFor(ids, 'TASK_OVERDUE');
+    // Day-before reminders: one per task and due date (a new due date gets a new reminder).
+    const soon: { task_id: string }[] = await this.dataSource.query(
+      `INSERT INTO task_reminders (task_id, kind, due_date)
+         SELECT id, 'due_soon', due_date FROM tasks
+          WHERE status <> 'DONE' AND assignee_id IS NOT NULL AND due_date = CURRENT_DATE + 1
+       ON CONFLICT DO NOTHING
+       RETURNING task_id`,
+    );
+    await this.publishFor(soon.map((r) => r.task_id), 'TASK_DUE_SOON');
+    return { overdue: ids.length, dueSoon: soon.length };
+  }
+
+  private async publishFor(ids: string[], type: 'TASK_OVERDUE' | 'TASK_DUE_SOON') {
+    if (!ids.length) return;
     const tasks = await this.dataSource.getRepository(Task).find({ where: { id: In(ids) }, relations: { assignee: true, reporter: true, labels: true, parent: true } });
     for (const task of await toTaskDtos(this.dataSource.manager, tasks)) {
       const t = tasks.find((x) => x.id === task.id)!;
-      this.events.publish('TASK_OVERDUE', { organizationId: t.organizationId, projectId: t.projectId, actor: null, data: { task } });
+      this.events.publish(type, { organizationId: t.organizationId, projectId: t.projectId, actor: null, data: { task } });
     }
-    return { overdue: ids.length };
   }
 
   /** Permanently removes tasks that have been in the trash for more than 30 days. */

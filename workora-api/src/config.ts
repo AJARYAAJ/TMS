@@ -14,6 +14,8 @@ export interface AppConfig {
   rateLimitPerMinute: number;
   realtimeRedisAdapter: boolean;
   queuePrefix: string;
+  /** Web Push (VAPID). Without keys, a key pair is generated on first use and stored encrypted. */
+  push: { publicKey: string | null; privateKey: string | null; subject: string };
   /** Allow webhooks to private/loopback addresses (disable in production to prevent SSRF). */
   webhookAllowPrivate: boolean;
   /** Public URL of the SPA, used for links in Slack messages and GitHub comments. */
@@ -75,6 +77,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     apiPublicUrl: (env.API_PUBLIC_URL ?? `${new URL(env.APP_URL ?? 'http://localhost:5173').origin}/api/v1`).replace(/\/$/, ''),
     smtp: smtpConfig(env),
     encryptionKey: env.ENCRYPTION_KEY ?? `derived:${env.JWT_SECRET ?? 'dev-only-secret-change-me'}`,
+    push: {
+      publicKey: env.VAPID_PUBLIC_KEY || null,
+      privateKey: env.VAPID_PRIVATE_KEY || null,
+      // Push services contact this address about problems; default to the sender address of emails.
+      subject: env.VAPID_SUBJECT || `mailto:${env.MAIL_FROM?.match(/<([^>]+)>/)?.[1] ?? env.MAIL_FROM ?? 'no-reply@workora.dev'}`,
+    },
     webhookAllowPrivate: (env.WEBHOOK_ALLOW_PRIVATE ?? (env.NODE_ENV === 'production' ? 'false' : 'true')) === 'true',
   };
 }

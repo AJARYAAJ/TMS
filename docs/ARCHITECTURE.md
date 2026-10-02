@@ -183,6 +183,43 @@ expire and can only turn email off. Emails link to the SPA's `/unsubscribe` conf
 nothing, so link scanners are harmless). They also carry `List-Unsubscribe` / `List-Unsubscribe-Post` headers
 pointing at `POST /api/v1/email/unsubscribe` for RFC 8058 one-click unsubscribes.
 
+### Notifications and desktop push
+
+`NotificationListener` turns domain events into notifications. Each one has a *category* (the email categories
+plus `security`) and, when it isn't about the event's task, an in-app `link` (`/trash`, a project's goals or
+sprint page, `/settings`). The actor never notifies themselves. Who hears about what:
+
+| Event | Recipients |
+|-------|------------|
+| Assigned / taken off | new assignee / previous assignee |
+| Comment | @mentioned people (as a mention), then watchers, assignee and reporter |
+| State change | watchers, reporter and assignee |
+| Priority or due date change, file added, now blocked, trashed, restored | watchers (assignees watch their tasks automatically); for blockers, those of the blocked task |
+| Due tomorrow / overdue | assignee (the job scan writes `task_reminders`, one per task and due date) |
+| GitHub PR linked, merged or closed; issue linked | watchers and assignee |
+| Next recurring occurrence | its assignee |
+| Form response | the form's creator (the event has no actor, so the creator still hears) |
+| Goal updated | its owner |
+| Sprint started / completed | everyone with work in it |
+| 2FA turned on or off, recovery code used | the account, in every workspace (`SECURITY_NOTICE`) |
+
+Each notification is stored, sent over the websocket to the user's room, queued as email if the person's email
+preferences allow it, and sent as Web Push if their desktop preferences (`users.push_prefs`, sparse overrides,
+every kind on by default) allow it. Security notices ignore preferences.
+
+`PushService` implements Web Push with the `web-push` library: VAPID (RFC 8292) and aes128gcm payload
+encryption (RFC 8291). Each browser is a row in `push_subscriptions`, unique by endpoint, so a shared computer
+moves to whoever turns it on. A 404 or 410 from the push service deletes the row, and so do 10 failures in a row.
+In production, endpoints must be https on a known push service (FCM, Mozilla, Windows, Apple), so a subscription
+can't be used for SSRF. The VAPID key pair comes from the environment, or is generated once and stored sealed in
+`app_secrets`. The payload carries the title, body, workspace name, category and an absolute URL with
+`?org=<id>`. Opening that URL switches workspace when needed.
+
+In the browser, `public/sw.js` (scope `/workora/`) shows each push, unless a Workora tab is focused (the
+toast covers it then). On click it focuses an open tab and asks it to navigate (`postMessage`), or opens a new
+window. Where push is unavailable, the app falls back to `tab` mode: when it is in the background, the realtime
+handler asks the service worker to show the notification.
+
 ### Two-factor authentication
 
 TOTP follows RFC 6238: SHA-1, 6 digits, 30-second steps, and one step of clock drift accepted either way. The

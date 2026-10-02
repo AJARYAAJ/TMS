@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/toast';
 import { api, errorMessage } from '@/services/api/client';
 import type { MfaChallenge, Session } from '@/types';
+import { detachDesktop } from '@/features/notifications/desktop';
 import { useSessionStore } from './session.store';
 
 /** Password sign-in. Resolves to a session, or to a 2FA challenge when the account has 2FA on. */
@@ -59,6 +60,8 @@ export function useSignOut() {
   const signOut = useSessionStore((s) => s.signOut);
   const qc = useQueryClient();
   return () => {
+    // Stop this browser's desktop notifications for this person; the next sign-in re-registers it.
+    void detachDesktop(useSessionStore.getState().session?.token);
     signOut();
     qc.clear();
   };

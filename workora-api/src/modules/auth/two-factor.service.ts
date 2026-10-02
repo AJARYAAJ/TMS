@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { AuthPrincipal } from '../../common/auth/principal';
 import { hashRecoveryCode, newRecoveryCodes, newTotpSecret, otpauthUrl, verifyTotp } from '../../common/auth/totp';
 import { SecretBox } from '../../common/crypto/secret-box';
+import { EventBus } from '../../common/events/event-bus.service';
 import { ApiException } from '../../common/http/api-exception';
 import { EmailService } from '../email/email.module';
 import { Organization } from '../organizations/organization.entity';
@@ -19,6 +20,7 @@ export class TwoFactorService {
     private readonly dataSource: DataSource,
     private readonly box: SecretBox,
     private readonly email: EmailService,
+    private readonly events: EventBus,
   ) {}
 
   private load(userId: string) {
@@ -54,7 +56,7 @@ export class TwoFactorService {
       { id: user.id },
       { totpSecret: user.totpPendingSecret, totpPendingSecret: null, totpEnabledAt: new Date(), totpLastStep: String(step), recoveryCodes: codes.map(hashRecoveryCode) },
     );
-    await this.email.securityNotice(user, 'Two-factor authentication is on', 'You turned on two-factor authentication. Signing in now needs a code from your authenticator app.');
+    await this.notify(user, 'Two-factor authentication is on', 'You turned on two-factor authentication. Signing in now needs a code from your authenticator app.');
     return { enabled: true, recoveryCodes: codes };
   }
 
@@ -66,7 +68,7 @@ export class TwoFactorService {
     if (!(await bcrypt.compare(password ?? '', user.passwordHash))) throw new ApiException(401, 'INVALID_CREDENTIALS', 'Password is incorrect');
     if (!(await this.check(user, code))) throw ApiException.badRequest('INVALID_CODE', 'That code is not valid');
     await this.dataSource.getRepository(User).update({ id: user.id }, { totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: [] });
-    await this.email.securityNotice(user, 'Two-factor authentication is off', 'You turned off two-factor authentication. Signing in now only needs your password.');
+    await this.notify(user, 'Two-factor authentication is off', 'You turned off two-factor authentication. Signing in now only needs your password.');
     return { enabled: false };
   }
 
@@ -86,6 +88,12 @@ export class TwoFactorService {
     return this.check(user, code);
   }
 
+  /** Security email plus an in-app and desktop notification. */
+  private async notify(user: User, title: string, body: string) {
+    this.events.securityNotice({ userId: user.id, title, body });
+    await this.email.securityNotice(user, title, body);
+  }
+
   /** TOTP codes advance the replay guard; recovery codes are burned on use. */
   private async check(user: User, code: string, allowRecovery = true) {
     const input = String(code ?? '').trim();
@@ -101,7 +109,7 @@ export class TwoFactorService {
     const [, n] = await this.dataSource.query(`UPDATE users SET recovery_codes = recovery_codes - $2 WHERE id = $1 AND recovery_codes ? $2`, [user.id, hash]);
     if (n !== 1) return false;
     const left = user.recoveryCodes.length - 1;
-    await this.email.securityNotice(user, 'A recovery code was used', `Someone signed in to your account with a recovery code. ${left} ${left === 1 ? 'code remains' : 'codes remain'}.`);
+    await this.notify(user, 'A recovery code was used', `Someone signed in to your account with a recovery code. ${left} ${left === 1 ? 'code remains' : 'codes remain'}.`);
     return true;
   }
 }

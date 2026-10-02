@@ -6,6 +6,13 @@ import { Actor } from '../auth/principal';
  * analytics…) react to it. The Task API never calls those subsystems directly.
  */
 export const DOMAIN_EVENT = 'workora.domain-event';
+export const SECURITY_NOTICE = 'workora.security-notice';
+
+export interface SecurityNotice {
+  userId: string;
+  title: string;
+  body: string;
+}
 
 export type DomainEventType =
   | 'TASK_CREATED'
@@ -39,6 +46,7 @@ export type DomainEventType =
   | 'TASK_TRASHED'
   | 'TASK_RESTORED'
   | 'FORM_SUBMITTED'
+  | 'TASK_DUE_SOON'
   | 'TASKS_IMPORTED';
 
 export interface FieldChange {

@@ -7,6 +7,7 @@ import { Column, CreateDateColumn, DataSource, Entity, PrimaryGeneratedColumn } 
 import { CurrentUser, MinRole, Public } from '../../common/auth/decorators';
 import { AuthPrincipal } from '../../common/auth/principal';
 import { Role } from '../../common/auth/roles';
+import { EventBus } from '../../common/events/event-bus.service';
 import { ApiException } from '../../common/http/api-exception';
 import { CustomField, toFieldDto } from '../fields/custom-field.entity';
 import { Membership } from '../organizations/membership.entity';
@@ -122,6 +123,7 @@ export class FormsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly tasks: TasksService,
+    private readonly events: EventBus,
   ) {}
 
   private repo() {
@@ -238,6 +240,13 @@ export class FormsService {
       customFields,
     });
     await this.dataSource.query(`UPDATE forms SET submission_count = submission_count + 1, last_submitted_at = now() WHERE id = $1`, [form.id]);
+    // No actor: the task is created as the form's owner, but they should still hear about the response.
+    this.events.publish('FORM_SUBMITTED', {
+      organizationId: form.organizationId,
+      projectId: form.projectId,
+      actor: null,
+      data: { form: { id: form.id, name: form.name, createdById: form.createdById }, task: { id: task.id, key: task.key, title: task.title }, submittedBy: who || null },
+    });
     return { ok: true, key: task.key };
   }
 

@@ -21,6 +21,7 @@ import { EmailNotifications1727900000000 } from './migrations/1727900000000-Emai
 import { WorkManagementPlus1728000000000 } from './migrations/1728000000000-WorkManagementPlus';
 import { LabelDescriptions1728100000000 } from './migrations/1728100000000-LabelDescriptions';
 import { TwoFactorAndSso1728200000000 } from './migrations/1728200000000-TwoFactorAndSso';
+import { PushNotifications1728300000000 } from './migrations/1728300000000-PushNotifications';
 import { SsoConnection, UserIdentity } from '../modules/sso/sso.entity';
 import { CustomField } from '../modules/fields/custom-field.entity';
 import { SavedView } from '../modules/views/views.module';
@@ -48,7 +49,7 @@ export function dataSourceOptions(url = loadConfig().databaseUrl): DataSourceOpt
     type: 'postgres',
     url,
     entities: ENTITIES,
-    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000, EmailNotifications1727900000000, WorkManagementPlus1728000000000, LabelDescriptions1728100000000, TwoFactorAndSso1728200000000],
+    migrations: [InitialSchema1727500000000, WorkManagementExtensions1727600000000, WorkflowsAndRecurrence1727700000000, SlackGithubIntegrations1727800000000, EmailNotifications1727900000000, WorkManagementPlus1728000000000, LabelDescriptions1728100000000, TwoFactorAndSso1728200000000, PushNotifications1728300000000],
     migrationsRun: true,
     synchronize: false,
     namingStrategy: new SnakeNamingStrategy(),

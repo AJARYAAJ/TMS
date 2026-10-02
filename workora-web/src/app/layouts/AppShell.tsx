@@ -34,6 +34,7 @@ import { CommandPalette } from '@/features/command-palette/CommandPalette';
 import { ShortcutsLayer } from '@/features/explore/Shortcuts';
 import { useNotifications } from '@/features/notifications/api';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { useNotificationEffects } from '@/features/notifications/effects';
 import { CreateProjectDialog } from '@/features/projects/CreateProjectDialog';
 import { useProjects } from '@/features/projects/api';
 import { GlobalSearch } from '@/features/search/GlobalSearch';
@@ -250,6 +251,7 @@ function RealtimeIndicator() {
 
 export function AppShell() {
   useRealtimeConnection();
+  useNotificationEffects();
   const setPalette = useUiStore((s) => s.setCommandPalette);
   const openCreateTask = useUiStore((s) => s.openCreateTask);
   const canCreate = useCan('MEMBER');

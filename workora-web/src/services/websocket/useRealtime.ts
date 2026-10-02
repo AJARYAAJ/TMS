@@ -1,20 +1,20 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useSession } from '@/features/auth/session.store';
-import { useOpenTask } from '@/features/tasks/useOpenTask';
+import { useOpenNotification } from '@/features/notifications/api';
 import { realtime } from './realtime';
 
 /** Keeps the socket connected for the signed-in session. */
 export function useRealtimeConnection() {
   const session = useSession();
   const qc = useQueryClient();
-  const openTask = useOpenTask();
-  // The socket outlives renders; always open tasks relative to the *current* location.
-  const openTaskRef = useRef(openTask);
-  openTaskRef.current = openTask;
+  const openNotification = useOpenNotification();
+  // The socket outlives renders; always open relative to the *current* location.
+  const openRef = useRef(openNotification);
+  openRef.current = openNotification;
   useEffect(() => {
     if (!session) return;
-    realtime.connect(session.token, qc, session.user.id, (key) => openTaskRef.current(key));
+    realtime.connect(session.token, qc, session.user.id, (n) => openRef.current(n));
     return () => realtime.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token, qc]);

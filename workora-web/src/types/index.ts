@@ -332,14 +332,26 @@ export interface Activity {
 export interface Notification {
   id: string;
   type: string;
+  /** assigned, mentioned, comments, status, changes, dueSoon, overdue, development, forms, goals, sprints, automation, workspace, security */
+  category: string | null;
   title: string;
   body: string;
   actor: { id: string; name: string } | null;
   projectId: string | null;
   taskId: string | null;
   taskKey: string | null;
+  /** In-app path for notifications that aren't about a task. */
+  link: string | null;
   read: boolean;
   createdAt: string;
+}
+
+export interface PushConfig {
+  publicKey: string;
+  enabled: boolean;
+  categories: Record<string, boolean>;
+  options: { key: string; label: string; description: string }[];
+  devices: { endpoint: string; device: string; createdAt: string; lastSuccessAt: string | null }[];
 }
 
 export interface Member {

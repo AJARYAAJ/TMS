@@ -6102,6 +6102,214 @@ a.project-card:hover {
   margin-top: 14px;
 }
 
+/* Notifications: kind badges, bell filters, desktop prompt, settings matrix */
+.note-avatar {
+  position: relative;
+  flex: none;
+  display: inline-block;
+}
+.note-system {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--ink-2);
+}
+.note-kind {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.note-kind.k-mentioned,
+.note-kind.k-assigned {
+  background: var(--accent);
+  color: #fff;
+}
+.note-kind.k-overdue {
+  background: var(--danger);
+  color: #fff;
+}
+.note-kind.k-dueSoon {
+  background: var(--warning);
+  color: #fff;
+}
+.note-kind.k-security {
+  background: var(--success);
+  color: #fff;
+}
+.notifications-menu .menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.note-filters {
+  margin: 2px 16px 8px;
+}
+.seg-sm button {
+  padding: 4px 11px;
+  font-size: 12.5px;
+}
+.seg-count {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  display: inline-grid;
+  place-items: center;
+}
+.note-empty {
+  padding: 18px 16px;
+}
+.desktop-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--volt-soft);
+  color: var(--ink);
+}
+.desktop-prompt > span {
+  flex: 1;
+  min-width: 0;
+}
+.menu-foot {
+  display: block;
+  margin-top: 4px;
+  padding: 10px 16px 6px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.menu-foot:hover {
+  color: var(--ink);
+}
+.bell.has-unread svg {
+  animation: bell-nudge 0.6s ease 1;
+}
+@keyframes bell-nudge {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(14deg); }
+  60% { transform: rotate(-10deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bell.has-unread svg {
+    animation: none;
+  }
+}
+.switch-sm {
+  width: 30px;
+  height: 17px;
+}
+.switch-sm span::after {
+  width: 11px;
+  height: 11px;
+}
+.switch-sm input:checked + span::after {
+  transform: translateX(13px);
+}
+.pref-head,
+.pref-matrix li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 92px;
+  align-items: center;
+  gap: 8px;
+}
+.pref-matrix li > .switch {
+  justify-self: center;
+}
+.pref-head {
+  padding: 12px 6px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.pref-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.pref-col svg {
+  margin-bottom: -2px;
+}
+.muted-switch {
+  opacity: 0.4;
+}
+.pref-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 6px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.pref-hint svg {
+  flex: none;
+}
+.pref-foot {
+  margin: 10px 6px 0;
+}
+.device-list ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.device-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.device-list li:first-child {
+  border-top: 0;
+}
+@media (max-width: 560px) {
+  .pref-head,
+  .pref-matrix li {
+    grid-template-columns: minmax(0, 1fr) 54px 54px;
+  }
+  /* The bell isn't at the screen edge on phones: span the top bar instead (it is the containing
+     block, because of its backdrop filter), and stay clear of the bottom tab bar. */
+  .notifications-menu {
+    position: fixed;
+    top: 72px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-height: calc(100dvh - 190px);
+    display: flex;
+    flex-direction: column;
+  }
+  .notifications-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
 @media (max-width: 1100px) {
   .bento {
     grid-template-columns: repeat(2, minmax(0, 1fr));

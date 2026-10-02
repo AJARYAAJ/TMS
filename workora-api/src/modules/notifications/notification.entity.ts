@@ -8,6 +8,10 @@ export class Notification {
   @Column({ type: 'uuid', nullable: true }) actorId: string | null;
   @Column({ type: 'varchar', nullable: true }) actorName: string | null;
   @Column() type: string;
+  /** Preference category (assigned, mentioned, …, security). */
+  @Column({ type: 'varchar', nullable: true }) category: string | null;
+  /** In-app path for notifications that aren't about a task (a goal, a form, Settings). */
+  @Column({ type: 'varchar', nullable: true }) link: string | null;
   @Column() title: string;
   @Column({ type: 'text', default: '' }) body: string;
   @Column({ type: 'uuid', nullable: true }) projectId: string | null;

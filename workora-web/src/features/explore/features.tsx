@@ -1,5 +1,6 @@
 import {
   Bell,
+  BellRing,
   BookOpen,
   CalendarDays,
   Clock,
@@ -85,7 +86,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     title: 'Collaborate',
     tagline: 'Work together in real time',
     features: [
-      { id: 'inbox', name: 'Inbox', blurb: 'Mentions, assignments and updates — live.', icon: <Inbox size={18} />, to: '/inbox', keywords: 'notifications' },
+      { id: 'inbox', name: 'Inbox', blurb: 'Every notification, with All / Unread / @Mentions filters.', icon: <Inbox size={18} />, to: '/inbox', keywords: 'notifications bell' },
+      { id: 'desktop', name: 'Desktop notifications', blurb: 'Pop-ups on your computer, even when Workora is closed.', icon: <BellRing size={18} />, to: '/settings', keywords: 'push browser notifications os alerts' },
       { id: 'docs', name: 'Docs', blurb: 'Markdown pages per project with live co-editing safety.', icon: <FileText size={18} />, to: '/docs', keywords: 'wiki notes' },
       { id: 'forms', name: 'Intake forms', blurb: 'A public link anyone can fill in; each answer becomes a task.', icon: <BookOpen size={18} />, to: 'project:forms', keywords: 'request form public', isNew: true },
       { id: 'email', name: 'Email notifications', blurb: 'Choose which emails you get; one-click unsubscribe.', icon: <Mail size={18} />, to: '/settings', keywords: 'smtp preferences' },
